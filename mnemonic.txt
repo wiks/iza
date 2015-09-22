@@ -1,0 +1,5455 @@
+`autor Wiktor Szymanowski
+`
+`22 czerwca 1998
+`v2.2
+`
+`
+`
+`
+DEFADR #0000
+`
+LD SP,#41EF         `stos pod alarmami,
+LD HL,#5FFF         `wyczyść pamięć RAM (też pauze)
+LD E,L
+LD D,H
+DEC DE
+LD (HL),#00
+LD BC,#3FFF
+LDDR
+LD A,#88                     `ustawienia początkowe PI/O
+LD BC,#E003
+OUT (C),A
+LD BC,#C003
+OUT (C),A
+SUB A                         `4takty `oblicz autosumę I EPROM
+LD H,A                        `4takty `   12+(33*8192)-5+13=
+LD L,A                        `4takty `   =270365 taktów. =0,135sekundy
+ADD A,(HL)          @NAS_B    `7taktów`\     /128=2113
+INC HL                        `6taków `|=> 33
+BIT 5,H                       `8taków `|
+JR Z,@NAS_B                   `12takty`/7gdy nie spełn.
+LD (#414D),A                  `13taktów`zapamiętaj autosumę
+
+`
+LD HL,@#005C          `załaduj początkową godzinę i datę i inne
+LD DE,#4101
+LD BC,#0008
+LDIR
+LD IY,#410E
+CALL @#1D24         `inicjuj LCD
+LD A,#67
+LD (#4066),A            `włącz NMI
+LD A,#01
+LD (#4094),A
+LD A,#06
+LD (#4079),A
+CALL @#0A99            `oblicz momenty zmiany czasu dla tego roku
+LD HL,#0800            `ustaw porę dnia na 08:00 do 21:00
+LD (#406A),HL
+LD (#406C),HL
+LD H,#16
+LD (#406E),HL
+LD A,#04
+LD (#4070),A            `graj BEEPER (BEEP co 2 sek przez 10 minut)
+CALL @#1426                `odświerz komunikaty dnia
+JP @Z_VER                 `dalej...
+`
+DEFBAJT1 #34           `miejsce na bajt uzupełniający autosumę (#34 przyp.)
+`
+`w ciągu sekundy mamy 4000000 taktów,
+`i 250 razy jest wywoływane NMI,->8000 taktów w przerwaniu
+`a więc dla procedury @#01F1 jest 8000-95(ta procedurka)=7905 taktów
+`obierając zapas daje to 7000 taktów
+EX AF,AF^           `przerwanie NMI
+EXX
+PUSH IX
+LD A,(#4066)
+CP #67              `czy włączone przerwania?
+CALL Z,@#01F1       `zrób
+POP IX
+EXX
+EX AF,AF^
+RETN
+`
+DEFETYK @#1A40                ` kody symbolizujące co wczytać
+DEFBAJT1 #08                  ` ile ich jest
+DEFBAJT1 #3F                  ` dzień tygodnia
+DEFTABE #0F12
+DEFBAJT1 #3E                  ` data
+DEFTABE #0D95
+DEFBAJT1 #3D                  ` godzina
+DEFTABE #0E2C
+DEFBAJT1 #3C                  ` nr. Stopera A-E
+DEFTABE #0EE2
+DEFBAJT1 #3B                  ` sound
+DEFTABE #0F2E
+DEFBAJT1 #3A                  ` tekst
+DEFTABE #0F4A
+DEFBAJT1 #39                  ` urządzenie A-D i co z nim
+DEFTABE #0F75
+DEFBAJT1 #38                  ` znak specjalny ( * @ ^ _ _)
+DEFTABE #0EF1
+`
+AND A               @#0078
+JR Z,@#0080
+INC HL              @#007B
+INC HL
+DEC A
+JR NZ,@#007B
+LD A,(HL)           @#0080
+INC HL
+LD H,(HL)
+LD L,A
+RET 
+`
+LD BC,#C002         @KLAWI  `TERAZ
+LD HL,@M_KLA
+DEC HL
+LD DE,#0028
+LD A,(#4005)
+CP #01
+JR C,@#009B
+ADD HL,DE
+DEC A
+LD A,(#4000)        @#009B
+INC A
+CP #0A
+JR C,@#00A4
+SUB A
+LD (#4000),A        @#00A4
+OUT (C),A
+RLCA
+RLCA
+LD E,A
+ADD HL,DE
+IN A,(C)
+OR #0F
+CP #FF
+LD (#4001),A
+JR Z,@#00C0
+INC HL              @#00B8
+RLCA
+JR C,@#00B8
+LD A,(HL)
+LD (#4001),A
+LD A,#09            @#00C0
+OUT (C),A
+IN A,(C)
+OR #3F
+CP #3F
+LD HL,#4001
+JR NZ,@#00D1
+LD (HL),#FE
+LD A,(HL)           @#00D1
+CP #FF
+JR Z,@#00D9
+LD (#4002),A
+LD A,(#4000)        @#00D9
+AND A
+JR NZ,@#0104
+LD HL,#4003
+LD A,(HL)
+AND A
+JR Z,@#00EF
+DEC A
+LD (HL),A
+LD A,#FF
+LD (#4002),A
+JR @#0104
+LD A,(#4002)        @#00EF
+LD (#4004),A
+LD A,#FF
+LD (#4002),A
+LD A,(#4004)
+CP #FF
+JR Z,@#0104
+LD A,#05
+LD (HL),A
+LD A,(#4004)        @#0104
+CP #FF
+RET Z
+LD A,(#4108)
+CP #01
+RET Z
+LD A,#03            @ODDAL
+LD (#4090),A
+RET
+`
+` tabela liczby dni w miesiącach
+DEFETYK @#1EE4                `(#1EE3)
+DEFBAJT1 #1F #1C #1F #1E #1F #1E
+DEFBAJT1 #1F #1F #1E #1F #1E #1F
+`
+LD A,(#4110)        @#0116
+INC A
+CALL @#0602
+AND A
+RET
+`
+LD HL,#408E         @#013D  `wywoływana 8 razy w sek
+RES 0,(HL)
+LD A,(#410A)     `zdarzenia mrugające,
+LD B,A
+LD A,(#4174)     `maska zdarzeń mrugających,
+`                 =0 bit ignoruj;  =1 bit aktywny,
+AND B
+BIT 6,A
+JR Z,@ak_oO
+BIT 6,(HL)
+JR NZ,@ak_ok
+LD DE,@TEXal      `adres tekstu alarmu,
+LD HL,#4045       `zrób komunikat specjalny o akumulatorku
+LD (HL),E
+INC HL
+LD (HL),D
+INC HL
+LD (HL),#90           `niejednorazowy, green, bez sound'a
+LD HL,#408E    
+JR @ak_ok
+RES 6,(HL)   @ak_oO
+AND #30    @ak_ok   `tylko te dwa bity,
+`    nie mruga LED'ami,
+RET Z
+SET 0,(HL)     `mrugaj LED'ami
+RET
+`
+INC (IY+#F1)        @#014B   `inc zegar
+`         trwa 892 tkt (gdy popr @#05B5 to 711 tkt)
+RET NZ                       
+LD A,(IY+#F2)
+INC A
+CP #3C
+JR C,@#015F
+LD A,#00
+LD (IY+#F2),A       @#015F
+RET C
+`
+LD A,(#4109)        `czy ustawiony zegar
+CP #67
+RET NZ
+`
+LD A,(IY+#F3)
+INC A
+CP #3C
+JR C,@#016D
+LD A,#00
+LD (IY+#F3),A       @#016D
+RET C
+LD A,(IY+#F4)
+INC A
+CP #18
+JR C,@#017B
+LD A,#00
+LD (IY+#F4),A       @#017B
+RET C
+LD A,(IY+#F5)
+INC A
+CP #08
+JR C,@#0189
+LD A,#01
+LD (IY+#F5),A       @#0189
+LD B,(IY+#F7)
+LD C,(IY+#F8)
+CALL @#05B5
+LD B,A
+LD A,(IY+#F6)
+CP B
+JR C,@#019E
+LD A,#00
+INC A               @#019E
+LD (IY+#F6),A
+RET C
+LD A,(IY+#F7)
+INC A
+CP #0D
+JR C,@#01AD
+LD A,#01
+LD (IY+#F7),A       @#01AD
+RET C
+INC (IY+#F8)
+RET
+`
+LD A,#06            @#01B5   `korekta czasu
+ADD A,(IY+#F1)     
+LD (IY+#F1),A
+CALL @ZM_CZ
+CALL @K_NO_                  `procedura dla v2.0
+`                             sprawdzenie bitu co sekundę...
+`                             analiza i ustawienie
+RET
+`
+SUB A               @ZE_A2   `zegar auto (ustaw tryb A)
+JR @KLLOP
+`
+LD A,#03            @ZE_A1   `ustaw zegar (ustaw tryb D)
+LD (#4162),A        @KLLOP
+JP @#04B1                    `pisz "Jak każesz"
+`
+CALL @#0B9A        @Rs232    `czyli obsłuż zamek,
+`                             analizuj to, co przyszło z komputera
+LD HL,#4097
+LD A,(HL)
+CP #F0              `=#F0 oznacza gotowe do analizy słowo
+RET NZ    
+INC HL
+LD B,(HL)           `rejB =długość z autosumą,
+LD HL,#4067
+LD A,(HL)
+AND A                  `musi być wyczuwany komputer!
+RET Z
+LD A,B         
+LD HL,@Tb_Rs
+LD B,(HL)
+INC HL          @naSTe
+CP (HL)
+INC HL
+LD E,(HL)
+INC HL
+LD D,(HL)
+JR Z,@JESST
+DJNZ @naSTe                 `sprawdź następny...
+LD A,#FE                    `skasuj otrzymany komunikat
+LD (#4097),A                `bo nie jest zrozumiały!!!
+JP NZ,@#$NO$               `odpowiedz, że nie rozumiesz!
+LD HL,#4099           @JESST
+EX DE,HL              `w DE jest adres pierw. bajtu komunikatu.
+JP (HL)
+`
+LD BC,#A001     @RS_OD       `sprawdź, czy cóś przyszło,
+IN A,(C)        `ODBIÓR ***************************************
+AND #02
+RET Z
+DEC C
+IN A,(C)
+LD B,A                 `zapamiętaj w B,
+LD A,(#4108)
+AND A
+RET Z                  `ret, bo jest tryb użytkownika,
+LD HL,#4067
+LD A,(HL)
+AND A
+JR NZ,@JUZ_J
+LD A,#FE                `gdy pierwszy przybyły bajt, to ustaw bufor,
+LD (#4097),A            `ustaw odbiór na pierwszy bajt,
+LD A,#F0    
+LD (#4067),A            `blokada trybu użytkownika,
+LD (#40C0),A            `blokada nadawania
+`
+LD A,#05        @JUZ_J  `czas samoprzełącznika,
+LD (#4068),A            `ustaw 5 sekund
+`                        zrób dalej z bajtem B ->złóż go w słowo,
+LD HL,#4097              `w rejB jest bajt, który przyszedł z RS232
+LD A,(HL)
+INC A
+JR NZ,@$$$$$
+LD (HL),A                        `tutaj=-1
+LD A,B
+AND A                            `zerowa długość nie dozwolona,
+JR Z,@BŁĄD!
+CP #1E                           `maksymalna długoć to 30 bajtów z autosumą!
+JR C,@&&**&
+LD (HL),#FE     @BŁĄD!           `czyli = &-02
+RET
+SUB A           @&&**&
+INC HL
+INC HL
+JR @%%%%%
+INC A           @$$$$$
+JR NZ,@^^^^^
+LD A,#FF                    `tutaj =-2
+CP B                        `czy bajt, który nadszedł to #FF ? (początkowy)
+RET NZ
+LD (HL),A           `=#FF     czyli=&-1
+RET
+BIT 7,A         @^^^^^
+RET NZ
+`
+DEC HL          @%%%%%
+LD E,A
+LD D,#00
+ADD HL,DE
+LD (HL),B
+LD HL,#4097
+INC (HL)
+LD A,(HL)
+INC HL
+SUB (HL)
+RET C
+RET Z
+`
+SUB A                 `odebrane już wszystkie,
+LD B,(HL)             `a więc oblicz autosumę i porównaj
+DEC B                 `z otrzymaną
+INC HL
+ADD A,(HL)      @A_SU_
+INC HL
+DJNZ @A_SU_
+CP #FF                 `autosuma=#FF zastąpiona przez #FE
+JR NZ @01000
+DEC A
+CP (HL)         @01000
+LD HL,#4097
+LD (HL),#FE            `jeśli zła autosuma, to ignoruj 
+RET NZ                 `słowo, które przybyło!
+LD (HL),#F0         `gdy OK to zrób =#F0, czyli do analizy,
+RET                 `blokuje odbiór do momentu zmiany tego bajtu.
+`                    a ta zmiana zostanie dokonana dopiero
+`                    po przeanalizowaniu i wykonaniu.
+`
+LD A,(#4067)    @RS_NA         `NADAWANIE ***********************
+AND A
+RET Z                     `powróć, gdy nie ma blokady trybu
+LD HL,#40C0               `użytkownika
+LD A,(HL)
+CP #F0
+RET Z
+INC (HL)
+LD A,(HL)
+BIT 7,A                 `7bit, czyli ujemna wartość, czyli pauza
+RET NZ
+AND A
+JR NZ,@DOLIJ
+LD D,#FF                `tutaj wyślij #FF
+JR @OU_BY
+LD E,A          @DOLIJ
+LD D,#00
+ADD HL,DE               `wynik w HL=#40C0 + (40C0)po inkrementacji...
+`                        dla #01 po inkrementacji da to adres #40C1,
+`                        czyli po bajcie #FF pójdzie (#40C1).
+LD D,(HL)
+LD BC,#A001     @OU_BY
+DEC (HL)
+IN A,(C)
+AND #01                 `RET, gdy nie jest gotowy do wysłania bajtu.
+RET Z
+INC (HL)
+DEC C                `adres #A000
+LD A,D
+OUT (C),A            `wyślij ten bajt.
+`                     sprawdź, czy zeszły wszystkie bajty...
+LD HL,#40C1
+LD A,(HL)
+DEC HL
+CP (HL)
+RET NC
+LD A,#F0             `tutaj zeszły wszystkie
+LD (#40C0),A         `a więc blokuj nadawanie.
+RET
+`
+`
+`mamy tutaj jeszcze 7000 taktów
+LD IY,#410E         @#01F1       `przerwanie NMI,
+CALL @#014B             `-> to popchnij zegar (trwa  tkt),
+`            procedury wywoływane w każdym NMI
+`            obsługują RS232, obsługa polega na nadawaniu
+`            i odbiorze. Jeśli (#4097)=#F0 to odbiór jest 
+`            zablokowany (trwa analiza, wykonanie itp.)
+`            jeśli (#40C0)=#F0 to nadawanie jest zablokowane
+`            czyli nie ma co nadawać, lub już nadano.
+`
+`            startując, nastawieni jesteśmy na odbiór.
+CALL @RS_OD               `odbierz z RS'a (trwa 485 tkt)
+CALL @RS_NA               `nadaj do RS'a  (trwa 256 tkt)
+`
+` już minęło 1698 taktów tego przerwania
+`
+LD A,(IY+#F1)            `a tu tak, jak było!
+LD HL,@#1EA6             `tabela raz w sekundzie,
+LD B,(HL)
+INC HL              @#01FB
+CP (HL)
+INC HL
+LD E,(HL)
+INC HL
+LD D,(HL)
+JR Z,@#023F
+DJNZ @#01FB
+`
+` już minęło 1965=1698+267 (dla 4 elementów w tabeli)
+`
+AND #1F
+LD HL,@#1EBC             `tabela 8 razy w sekundzie,
+LD B,(HL)
+INC HL              @#020B
+CP (HL)
+INC HL
+LD E,(HL)
+INC HL
+LD D,(HL)
+JR Z,@#023F
+DJNZ @#020B
+AND #01
+JR Z,@parys
+`
+CALL @dcf2_              `sprawdź stan bitu FR
+JP @#1BDF           `lcd
+`
+` tutaj ląduje gdy minęło 2416=1965+451 (dla 7 elementów)
+`
+` zostało nam jeszcze 4500 taktów(=7000-2416)
+LD A,(#408B)        @parys
+CP #50
+RET NC
+CALL @#09B5             ` 296 tkt
+CALL @#09D4            `\2944 tkt
+CALL NC,@#0A11         `/
+LD A,(#408B)
+INC A
+LD (#408B),A
+RET
+`więc w sumie wykorzystaliśmy 5722 tkt(=2416+25+296+2944+41).
+`z dostępnych 8000 tkt (72%)
+`
+`
+EX DE,HL            @#023F
+JP (HL)
+`
+LD IX,#4100         @#0241    `przeskok sekundy I
+CALL @#0ABA                   `zrób stopery o 1 sekundę,
+CALL @#05E6                   `uaktualni LED,
+LD A,(IY+#F2)
+AND A
+RET NZ
+LD A,(#416E)
+LD (#416F),A
+`                  przeskok minuty,
+`                  przepisz wartość sygnału (#416E),
+`                  w minucie.
+SUB A
+LD (#416E),A      `zeruj poziom sygnału w minucie
+LD (#408B),A      `krok przeszukiwania alarmów,
+LD A,(#4108)       `tryb pracy zegara,
+CP #01
+JR NZ,@#025E
+LD (#4094),A       `po co to?
+LD A,(IY+#F3)       @#025E
+AND A
+RET NZ
+`                  przeskok godziny,
+LD HL,#4162
+LD A,(HL)
+AND #03          `tylko gdy jest tryb C lub D,
+CP #02
+JR C,@poup1
+`
+DEC HL             `HL=#4161
+INC (HL)           `zwiększ licznik godzin bez przekazu,
+`
+LD A,(HL)
+CP #60          `&96 -przestaw z C na D,
+JR C,@poup1
+`
+INC HL             `HL=#4162
+SET 0,(HL)            `zrób tryb C->D,
+`
+CP #C8             `(=&200) czy 200 h?
+JR C,@poup1
+`
+LD A,#B0           `200h  (wpisz 200-24h!)
+LD (#4161),A          `#B0 = &176 = &200 -&24
+`
+LD HL,#4173
+LD (HL),#40
+`
+LD A,(#4170)   @poup1    `po wszystkim
+`                  przepisz wartość sygnału (#4171),
+`                  w godzinie.
+LD (#4171),A
+SUB A
+LD (#4170),A      `zeruj poziom sygnału w godzinie
+LD A,(IY+#F4)
+AND A
+RET NZ
+`                  przeskok doby,
+SUB A
+LD (#4173),A       `zeruj czas ustawienia zegara
+`
+LD HL,#408E        `6 bit to sygnalizacja, że był komunikat o 
+RES 6,(HL)         `złym połączeniu akumulatorów
+`
+CALL @#0972       
+LD (#4042),HL
+LD A,#00
+JR C,@#0274
+LD A,#92
+LD (#4044),A        @#0274
+`                  13- tego w piątek jako kmnkt terminarza
+BIT 7,A
+JR NZ,@OBEJa
+LD A,(IY+#F5)
+CP #06             `06=PIĄTEK
+JR NZ,@OBEJa
+LD A,(IY+#F6)
+CP #0D             `#0D=&13
+JR NZ,@OBEJa
+LD HL,@13PIA
+LD (#4042),HL
+LD A,#80
+LD (#4044),A
+`
+LD A,(#414D)            @OBEJa      `sprawdź autosumę I
+AND A
+RET Z              `DLA BLOKADY PRZY ZŁYM AUTOKODZIE      RET Z
+`RET     `dla blokady autosumy
+`                   BRAK BLOKADY GDY   (RET)   I ZŁA AUTOSUMA
+SUB A               @__ZLE  `blokuj zegar gdy zła autosuma!(NIETYLKO 00:00)
+LD (#4066),A                     `blokuj przerwania
+LD A,#01                         `CLS
+CALL @#1CC6
+LD HL,@TOHUJ
+LD B,#10
+LD A,(HL)           @N_LIT
+XOR #9A
+INC HL
+CALL @#1CD1
+DJNZ @N_LIT
+JR @MARTW           @MARTW
+`
+LD HL,#413A         @ZM_CZ
+LD B,#02
+LD A,(IY+#F6)       @#01D4
+CP (HL)
+INC HL
+JR NZ,@#01EC
+LD A,(IY+#F7)
+CP (HL)
+INC HL
+JR NZ,@#01ED
+LD A,(IY+#F4)
+CP (HL)
+INC HL
+JP Z,@#0A75
+JR @#01EE
+INC HL              @#01EC
+INC HL              @#01ED
+DJNZ @#01D4         @#01EE
+RET              
+`
+DEFETYK @#1A59                ` Tablica kodów LCD sterujących ?
+DEFBAJT1 #09                  ` ile ich jest
+DEFBAJT1 #F1                  ` EXE
+DEFTABE SPR_2
+DEFBAJT1 #FE                  ` ESC  - nie używany
+DEFTABE #03C5
+DEFBAJT1 #02                  ` strzałka w lewo
+DEFTABE #0CC5
+DEFBAJT1 #03                  ` strzałka w prawo
+DEFTABE #0CCF
+DEFBAJT1 #F3                  ` delete
+DEFTABE #0CDA
+DEFBAJT1 #F4                  ` insert
+DEFTABE #0D03
+DEFBAJT1 #10                  ` idź do ostatniego znaku tekstu
+DEFTABE #0D1E
+DEFBAJT1 #04                  ` strzałka w górę  - nie używany
+DEFTABE #0C67
+DEFBAJT1 #05                  ` strzałka w dół  - nie używany
+DEFTABE #0C67
+`
+DEFETYK @M_PLZ
+`Matryca dużych polskich liter
+`DEFBAJT1 #00 #1F #10 #08 #0E #02 #01 #1F`Ż
+`DEFBAJT1 #00 #1E #01 #01 #0E #10 #0F #02`Ś
+`DEFBAJT1 #00 #0E #11 #11 #11 #15 #0E #02`Ó
+`DEFBAJT1 #00 #11 #11 #13 #15 #19 #13 #15`Ń
+`DEFBAJT1 #00 #1F #10 #10 #18 #14 #12 #10`Ł
+`DEFBAJT1 #02 #1F #11 #10 #1E #10 #10 #1F`Ę
+`DEFBAJT1 #00 #0E #11 #10 #10 #11 #0E #02`Ć
+`DEFBAJT1 #02 #13 #11 #1F #11 #11 #11 #0E`Ą
+`Matryca małych polskich liter
+DEFBAJT1 #00 #1F #08 #04 #02 #1F #00 #0C `ż
+DEFBAJT1 #00 #1E #01 #0E #10 #0E #04 #08 `ś
+DEFBAJT1 #00 #0E #11 #11 #11 #0E #04 #08 `ó
+DEFBAJT1 #00 #11 #11 #11 #19 #16 #02 #04 `ń
+DEFBAJT1 #00 #0E #04 #04 #0C #06 #04 #0C `ł
+DEFBAJT1 #03 #0E #10 #1F #11 #0E #00 #00 `ę
+DEFBAJT1 #00 #0E #11 #10 #11 #0E #04 #08 `ć
+DEFBAJT1 #03 #0E #11 #0F #01 #0E #00 #00 `ą
+`
+CALL @#090C               @PRODU    ` rozkaz PRODUCENT
+LD HL,@PROHU
+LD B,#1C
+LD A,(HL)           @N_LID
+XOR #9A
+CALL @#10B6
+INC HL
+DJNZ @N_LID
+CALL @#10E3
+AND A
+RET
+`
+`
+DEFETYK @#197F                ` tabela danych interpretera
+DEFBAJT1 #8F #14 #7E #7D      ` ustaw zegar (d)(g)
+DEFBAJT1 #94 #02              ` zegar auto
+DEFBAJT1 #96 #7B #50          ` kukułka (m)(wył)
+DEFBAJT1 #86 #3E #3A          ` komunikat (d) (text)
+DEFBAJT1 #86 #7E              ` komunikat (d)
+DEFBAJT1 #8C #3C #3D #78      ` stoper a/e g (zn)
+DEFBAJT1 #8C #3C #0A          ` stoper a/e start
+DEFBAJT1 #8C #3C              ` stoper a/e
+DEFBAJT1 #8C #3C #05          ` stoper a/e halt
+DEFBAJT1 #BC #0A              ` a/e start
+DEFBAJT1 #BC                  ` a/e
+DEFBAJT1 #BC #05              ` a/e halt
+DEFBAJT1 #89 #14              ` pokaż zegar
+DEFBAJT1 #89 #14 #03          ` pokaż zegar data
+DEFBAJT1 #89 #03 #14          ` pokaż data zegar
+DEFBAJT1 #99                  ` sekundy
+DEFBAJT1 #87                  ` LORD
+DEFBAJT1 #8E                  ` śpi
+DEFBAJT1 #91 #3C              ` ZAŁĄCZ a/d
+DEFBAJT1 #90 #3C              ` wyłącz a/d
+DEFBAJT1 #84 #3D #7D          ` dzień g (g)
+DEFBAJT1 #84                  ` dzień
+DEFBAJT1 #92 #13 #7E          ` zamek zamknij
+DEFBAJT1 #93 #12 #7E          ` zamknij zamek
+DEFBAJT1 #92 #08 #7E          ` zamek otwórz
+DEFBAJT1 #88 #12 #7E          ` otwórz zamek
+DEFBAJT1 #81 #78 #7E #7F #3D #7A #7B #79 #79 #79 #79` alarm...
+DEFBAJT1 #81                  ` alarm
+DEFBAJT1 #BE                  ` data
+DEFBAJT1 #95                  ` cześć
+DEFBAJT1 #8B #17 #3E #3D      ` czas letni d g
+DEFBAJT1 #8B #18 #3E #3D      ` czas zimowy d g
+DEFBAJT1 #89 #17 #18          ` pokaż letni zimowy
+DEFBAJT1 #94                  ` zegar
+DEFBAJT1 #BB                  ` melodyjka
+DEFBAJT1 #8F #17 #18          ` ustaw letni zimowy
+DEFBAJT1 #8D                  ` producent
+DEFBAJT1 #00                  ` koniec
+`
+DEFETYK @#19EA
+DEFTABE #129F                 ` ustaw zegar
+DEFTABE ZE_A2                 ` zegar auto
+DEFTABE #1386                 ` kukułka
+DEFTABE #11D0                 ` komunikat
+DEFTABE #143F                 ` komunikat
+DEFTABE #13B4                 ` stoper g
+DEFTABE #11B8                 ` stoper start
+DEFTABE #1161                 ` stoper
+DEFTABE #11A0                 ` stoper halt
+DEFTABE #11B8                 ` a/e start
+DEFTABE #0116                 ` a/e
+DEFTABE #11A0                 ` a/e halt
+DEFTABE #04A0                 ` pokaż zegar
+DEFTABE #04A8                 ` pokaż data zegar
+DEFTABE #04A8                 ` pokaż zegar data
+DEFTABE #05EC                 ` sekundy
+DEFTABE #0D32                 ` lord
+DEFTABE #116D                 ` śpi
+DEFTABE #1186                 ` załącz
+DEFTABE #1193                 ` wyłącz
+DEFTABE #1205                 ` dzień g (g)
+DEFTABE #1225                 ` dzień
+DEFTABE #124C                 ` zamek zamknij
+DEFTABE #124C                 ` zamknij zamek
+DEFTABE #16EE                 ` zamek otwórz
+DEFTABE #16EE                 ` otwórz zamek
+DEFTABE #1722                 ` alarm...
+DEFTABE #14FA                 ` alarm
+DEFTABE #1312                 ` data
+DEFTABE #0995                 ` cześć
+DEFTABE #1803                 ` czas letni
+DEFTABE #1808                 ` czas zimowy
+DEFTABE #182E                 ` pokaż letni zimowy
+DEFTABE ZE_KM                 ` zegar
+DEFTABE #1275                 ` melodja
+DEFTABE #17FD                 ` ustaw letni zimowy
+DEFTABE PRODU                 ` producent
+`
+DEFETYK @VERSI                ` wersja EPROM
+DEFBAJT1 #20 #49 #5A #41 #76 #32 #2E #32     `" IZAv2.2 "
+DEFBAJT1 #20 #39 #38 #30 #36 #32 #30 #20
+DEFBAJT1 #00
+`
+DEFETYK @za_za                ` Zanik zasilania!
+DEFBAJT1 #5A #61 #6E #69 #6B #20 #7A #61  
+DEFBAJT1 #73 #69 #6C #61 #6E #69 #61 #21
+DEFBAJT1 #00
+`
+DEFETYK @#06B9                ` Twoje życzenie
+DEFBAJT1 #54 #77 #6F #6A #65 #20 #0F #79
+DEFBAJT1 #63 #7A #65 #6E #69 #65 #3A #20
+`
+DEFETYK @#06C9                ` Czas nieznany
+DEFBAJT1 #A0 #43 #7A #61 #73 #20 #6E #69
+DEFBAJT1 #65 #7A #6E #61 #6E #79 #20 #20
+`
+DEFETYK @#06D9                ` Stoper A stop
+DEFBAJT1 #A0 #53 #74 #6F #70 #65 #72 #20
+DEFBAJT1 #41 #20 #73 #74 #6F #70 #20 #20
+`
+DEFETYK @#06E9                ` Zmiana czasu
+DEFBAJT1 #A0 #20 #5A #6D #69 #61 #6E #61
+DEFBAJT1 #20 #63 #7A #61 #73 #75 #20 #20
+`
+DEFETYK @#06F9                ` Ranek
+DEFBAJT1 #D2 #61 #6E #65 #6B #20
+`
+DEFETYK @#06FF                ` , wieczór
+DEFBAJT1 #AC #20 #77 #69 #65 #63 #7A #0D #72 #20
+`
+DEFETYK @#0709                ` ***** (rozerwany przez dwie deklaracje)
+DEFBAJT1 #A0 #2A
+DEFETYK @#070B                ` dla **.**.****r
+DEFBAJT1 #2A #2A #2A #2A #20
+`
+DEFETYK @#0710                ` Przykro mi, ale nie potrafię...
+DEFBAJT1 #D0 #72 #7A #79 #6B #72 #6F #20
+DEFBAJT1 #6D #69 #2C #20 #61 #6C #65 #20 #6E
+DEFBAJT1 #69 #65 #20 #70 #6F #74 #72 #61
+DEFBAJT1 #66 #69 #0A #2E #2E #2E
+`
+DEFETYK @#072F                ` Nie znam żadnego.
+DEFBAJT1 #CE #69
+DEFBAJT1 #65 #20 #7A #6E #61 #6D #20 #0F
+DEFBAJT1 #61 #64 #6E #65 #67 #6F #2E
+`
+DEFETYK @#0740           `Pamięć alarmów jest pełna!
+DEFBAJT1 #D0 #61 #6D #69 #0A #09 #20 #61 
+DEFBAJT1 #6C #61 #72 #6D #0D #77 #20 #6A
+DEFBAJT1 #65 #73 #74 #20 #70 #65 #0B #6E
+DEFBAJT1 #61 #21
+`
+DEFETYK @#0764                `Zamek jest zakodowany. Podaj kod.
+DEFBAJT1 #DA #61 #6D #65 #6B
+DEFBAJT1 #20 #6A #65 #73 #74 #20 #7A #61
+DEFBAJT1 #6B #6F #64 #6F #77 #61 #6E #79
+DEFBAJT1 #2E #20 #50 #6F #64 #61 #6A #20
+DEFBAJT1 #6B #6F #64 #2E
+`
+DEFETYK @#079A                ` Jak każesz !
+DEFBAJT1 #CA #61 #6B #20 #6B #61 #0F
+DEFBAJT1 #65 #73 #7A #20 #21 #20
+`
+DEFETYK @KASUJ                ` kasuje !
+DEFBAJT1 #CB #61 #73 #75 #6A #65 #20 #21 
+DEFBAJT1 #00
+`
+DEFETYK @TX_**         ` pom text "**:**"
+DEFBAJT1 #AA #2A #3A #2A #2A
+DEFETYK @TX_DC         ` pom text "DCF"
+DEFBAJT1 #C4 #43 #46
+`
+DEFETYK @13PIA         ` "jestem przesądna"
+DEFBAJT1 #EA #65 #73 #74 #65 #6D #20 #70 
+DEFBAJT1 #72 #7A #65 #73 #08 #64 #6E #61
+`
+DEFETYK @TEXal
+DEFBAJT1 #73 #70 #72 #2E #61 #6B #75 #6D     `spr.akumulator !
+DEFBAJT1 #75 #6C #61 #74 #6F #72 #20 #21
+DEFBAJT1 #00
+`
+`wywoływana 125 razy/sek -co drugie NMI
+LD IX,#4162       @dcf2_
+INC (IX+#04)
+LD A,(#4162)
+AND #80
+LD C,A           `stary bit FR
+LD A,(#410A)
+XOR #80
+AND #80
+JR Z,@LL_HL
+SET 7,(IX+#00)
+INC (IX+#03)
+CP C
+JR NZ,@___LH
+LD A,(#4165)
+CP #80
+RET C
+DEC (IX+#03)
+SET 5,(IX+#00)    @blad!
+SET 6,(IX+#00)
+RET
+LD A,(IY+#F1)       @___LH
+LD (#4164),A
+LD A,(#4163)
+CP #05
+JR C,@odpus
+LD A,(#4164)    
+CP #0B
+JR C,@_0000
+CP #F5
+JR C,@odpus
+LD A,#FF
+JR #01
+SUB A            @_0000
+LD (IY+#F1),A
+LD (#4164),A
+LD A,(#4166)     @odpus
+LD (IX+#04),#01
+RES 4,(IX+#00)
+CP #80
+JR NC,@_ZLE_
+CP #7B
+RET NC
+SET 4,(IX+#00)    @_ZLE_
+RET
+RES 7,(IX+#00)    @LL_HL
+CP C
+JR Z,@___LL
+LD A,(#4165)
+CP #0B
+JR C,@blad!
+CP #0F
+JR C,@_"0"_
+CP #15
+JR C,@blad!
+CP #1E
+JR NC,@blad!
+RES 5,(IX+#00)  
+SET 6,(IX+#00)
+RET
+SET 5,(IX+#00)    @_"0"_
+RES 6,(IX+#00)
+RET
+LD (IX+#03),#00   @___LL
+LD A,(#4166)
+CP #A0
+RET C
+LD (IX+#04),#23
+RES 5,(IX+#00)  
+RES 6,(IX+#00)
+RET
+`
+`procedura liczy liczbę bitów w (HL),
+`a więc sprawdza parzystość.
+`wy: CY-nieparzysta, NC-parzysta, Acc=liczab bitów="1"
+`COBRA, trwa 197 tkt
+LD C,(HL)         @paryt
+SUB A
+LD B,A
+SRL C
+ADC A,B
+SRL C
+ADC A,B
+SRL C
+ADC A,B
+SRL C
+ADC A,B
+SRL C
+ADC A,B
+SRL C
+ADC A,B
+SRL C
+ADC A,B
+SRL C
+ADC A,B
+LD C,A
+SRL C
+RET
+`
+`procedura przelicza Acc na wartość,
+`w Acc bity jak w 2* BCD.
+`COBRA, trwa 89tkt
+PUSH AF         @WAR_A
+AND #0F
+LD C,A
+POP AF
+RLCA
+RLCA
+RLCA
+RLCA
+AND #0F
+LD B,A
+ADD A,A
+ADD A,A
+ADD A,B
+ADD A,A
+ADD A,C
+RET
+`
+`zrób 16 znakowy tekst do (HL) o DCF77
+LD DE,@TX_DC        @zr_DT
+CALL @#1287
+LD (HL),#20          `"DCF 59/60 23:59c"
+INC HL
+LD A,(#416F)
+CALL @#0612
+CALL @#0683
+LD (HL),#2F          `    (/)
+INC HL
+LD A,(#4171)
+CALL @#0612
+CALL @#0683
+LD (HL),#20
+INC HL
+LD A,(#4173)
+BIT 7,A
+JR NZ,@JUM01
+LD DE,@TX_**
+CALL @#1287
+JR @JUM02
+AND #1F       @JUM01
+CALL @#0612
+CALL @#0683
+LD (HL),#3A            `   (:)
+INC HL
+LD A,(#4172)
+CALL @#0612
+CALL @#0683
+LD A,(#4162)  @JUM02
+AND #03
+ADD A,#61
+LD (HL),A
+RET
+`
+LD A,(#4068)        @#0278    `przeskok sekundy II
+AND A                       `samporzełącznik trybu komputera,
+JR Z,@!02a4                 `(do RS232)
+DEC A
+LD (#4068),A
+JR NZ,@!02a4
+LD (#4067),A                 `odblokuj przełączanie trybu (Acc już =#00),
+LD A,#01                     `uaktualnij LCD,
+LD (#4094),A
+`
+LD A,(IY+#F2)       @!02a4
+AND A
+RET NZ
+RES 1,(IY+#FD)                `przeskok minuty,
+LD HL,#4070
+LD A,(HL)                     `jaki sound,
+INC HL
+OR (HL)                      `jeśli Acc=#00 to nie ma żadnego sound,
+LD HL,#4091
+JR NZ,@#028D
+LD (HL),A                    `licznik dżemki,
+LD A,(HL)           @#028D
+AND A
+JR Z,@#0296
+DEC (HL)                     `zmniejsz o dżemkę minutę,
+SET 1,(IY+#FD)
+DEC HL              @#0296
+LD A,(HL)                    `wartość samoprzełącznika na tryb systemu,
+AND A
+JR Z,@#02A3
+DEC (HL)
+JR NZ,@#02A3
+LD A,#01
+LD (#4094),A                 `zrób tryb systemu,
+`
+LD A,(IY+#F3)       @#02A3  
+AND A                       
+RET NZ                      
+`
+`przeskoczyła godzina,
+`
+LD HL,#408E      
+BIT 4,(HL)         `czy jest kurant?
+JR Z,@#02C9        `jump gdy niema,
+BIT 3,(HL)         `czy ma być kukułka?
+JR NZ,@#02cc        `jump, z kukułką
+`
+LD A,#02
+LD (#4071),A       `jedno piknięcie= TON,
+JR @#02C9      
+`
+LD A,(IY+#F4)   @#02cc   `Acc=godzina
+AND A
+JR NZ,@#02C0
+LD A,#0C               `północ= 12uderzeń
+CP #0D              @#02C0
+JR C,@#02C6
+SUB #0C                 `gdy większa od 12 to odejmij 12
+LD (#4093),A        @#02C6     `zadaj kurantowi,
+`
+LD A,(IY+#F4)       @#02C9
+AND A
+RET NZ
+`
+`przeskoczył dzień
+`
+LD HL,(#406A)
+LD (#406C),HL
+LD HL,#408E
+RES 5,(HL)
+CALL @#0938        
+LD (#403F),HL
+SUB A
+BIT 7,(HL)
+JR Z,@#02E6
+LD A,#98
+LD (#4041),A        @#02E6
+LD A,(IY+#F6)
+CP #01
+RET NZ
+LD A,(IY+#F7)
+CP #01
+CALL Z,@#0A99
+RET
+`
+LD A,(#406D)        @#02F8
+CP (IY+#F4)
+JR C,@#030C
+JR NZ,@#0320
+LD A,(#406C)
+CP (IY+#F3)
+JR C,@#030C
+JR NZ,@#0320
+LD A,(#406F)        @#030C
+CP (IY+#F4)
+JR C,@#0320
+JR NZ,@#0324
+LD A,(#406E)
+CP (IY+#F3)
+JR Z,@#0320
+JR NC,@#0324
+SUB A               @#0320
+LD (#4071),A
+LD A,(#4070)        @#0324
+LD B,A
+LD A,(#4071)
+CP B
+JR C,@#032F
+LD B,A
+LD A,(#4078)        @#032F
+AND #07
+CP B
+JR Z,@#0355
+LD A,#80
+OR B
+LD (#4078),A
+INC B
+LD DE,#0004
+LD HL,@SOUND                  `W PRZYSZŁOŚCI @1E86 (-0004) @SOUND
+AND A
+SBC HL,DE
+ADD HL,DE           @#0344
+DJNZ @#0344
+LD DE,#4072
+LD BC,#0004
+LDIR
+LD A,(#4074)
+LD (#4076),A
+LD A,(#4078)        @#0355
+AND #07
+JR Z,@#0375
+LD A,(#4072)
+DEC A
+LD (#4072),A
+JR NZ,@#037A
+LD A,(#4073)
+DEC A
+LD (#4073),A
+JR NZ,@#037A
+SUB A
+LD (#4070),A
+LD (#4071),A
+`
+LD (#4078),A        `dodane dla poprawienia sound???
+`
+RES 0,(IY+#FC)      @#0375
+RET
+LD A,(#4078)        @#037A
+AND #80
+JR Z,@#0394
+LD HL,#4076
+DEC (HL)
+JR NZ,@#03A5
+LD HL,#4078
+RES 7,(HL)
+LD A,(#4075)
+LD (#4077),A
+JR @#03A5
+LD HL,#4077         @#0394
+DEC (HL)
+JR NZ,@#03A5
+LD HL,#4078
+SET 7,(HL)
+LD A,(#4074)
+LD (#4076),A
+RES 0,(IY+#FC)      @#03A5
+LD A,(#4078)
+AND #80
+RET Z
+SET 0,(IY+#FC)
+RET
+`
+LD (#410F),HL       @#03B4   `pomocnicza do @#0A99
+LD A,(IY+#F8)                `oblicza ostatnią niedzielę
+LD (#4111),A
+CALL @#133F
+DEC A               @#03C0
+RET Z
+DEC L
+JR @#03C0
+`
+POP AF              @#03C5         `wykonaj EXE
+LD A,#FF
+AND A
+RET
+`
+LD A,(#415E)        @SPR_2        ` autosuma II -kontrola 
+AND A
+JR Z,@#03C5 
+LD HL,(#415F)
+`
+BIT 5,H
+JR Z,@#03C5        
+`JR @#03C5                `dla blokady autosumy
+`
+LD HL,@__ZLE
+NOP
+NOP
+JP (HL)
+`
+LD A,(#4094)        @#03CB
+DEC A
+JR NZ,@#03ED
+LD (#4090),A
+LD (#4049),A
+LD (#404A),A
+LD (#403B),A
+LD A,#01
+LD (#4108),A
+LD (#403A),A
+CALL @#0B4C
+CALL @#08EA
+JR @#03FB
+DEC A               @#03ED
+JR NZ,@#0411
+LD (#4108),A
+CALL @#0B4C
+LD A,#03
+LD (#4090),A
+SUB A               @#03FB
+LD (#4094),A
+LD (#4107),A
+LD (#4005),A
+LD A,#FF
+LD (#4002),A
+LD (#4004),A
+LD (#4006),A
+RET
+LD A,(#4108)        @#0411  `tryb pracy zegara,
+CP #01
+RET NZ                      `jeśli użytkownika to odpuść komunikaty,
+LD A,(#403A)                `bufor CoWykonać,
+AND A
+RET NZ                      `(gdy pełny to odpuść),
+LD A,#05
+LD (#403A),A                `rozkaz->przesuń w lewo,
+CALL @#0492
+LD (#4038),A                `znak, który wsunąć z prawej strony,
+RET NZ                      `jeśli był jakiś to wyjdź...
+LD (#403A),A                `anuluj rozkaz przesuń w lewo,
+LD A,(IY+#F2)                  `sekundy,
+AND A
+JR Z,@#043A
+LD B,#06
+SUB #0A             @#0433     `do równej dziesiątki sekund->
+JR Z,@#043A
+DJNZ @#0433
+RET                            `->czekaj
+LD B,#04            @#043A
+LD HL,#403E         @#043C
+LD A,(#4048)               `nr(0-3)aktualnie wyświetlanego kmnkt
+INC A
+CP #04
+JR C,@#0448
+SUB A                      `modulo 4
+LD (#4048),A        @#0448
+JR Z,@#0453
+INC HL              @#044D
+INC HL
+INC HL
+DEC A
+JR NZ,@#044D               `HL=adres bajtu sterującego,
+BIT 7,(HL)          @#0453 `czy jest komunikat?
+JR NZ,@#045E               `hop=jest!
+DJNZ @#043C                `sprawdź następny
+RES 7,(IY+#FE)             `zgaś green LED
+RET
+RES 7,(IY+#FE)      @#045E `zgaś green LED
+BIT 4,(HL)                 `czy ma być zapalona green LED?
+JR Z,@#046A                `hop=zgaszona
+SET 7,(IY+#FE)             `zapal GreenLED
+LD A,(HL)           @#046A
+RRCA
+AND #07                    `sound komunikatu
+JR Z,@#0473
+LD (#4071),A               `tylko w porze dnia,
+BIT 5,(HL)          @#0473 `czy kmnkt jednorazowy?
+JR Z,@#0479                `hop->nie,
+RES 7,(HL)                 `kasuj komunikat,
+DEC HL              @#0479
+LD D,(HL)
+DEC HL
+LD E,(HL)                  `DE=adres tekstu,
+`
+LD A,D  `nowy dla wyeliminowania uciekających komunikatów
+OR E
+JR Z,@pusty
+LD A,(DE)
+AND A
+JR Z,@pusty
+`
+LD HL,#404B                `bufor tekstu komunikatów,
+LD (#4049),HL              `zapamiętaj,
+LD B,#0A                   `10 znaków to gwiazdki,
+PUSH DE
+LD DE,@#0709
+CALL @#1289                `przepisz.
+POP DE
+LD B,#10                   `16 znaków komunikatu,
+JP @#1289                  `przepisz.
+`
+`nowy dla wyeliminowania uciekających komunikatów
+INC HL              @pusty
+INC HL
+RES 7,(HL)        `kasuj komunikat, bo brak tekstu
+RET
+`
+DEFETYK @PROHU
+DEFBAJT1 #CA #E8 #F5 #FE #EF #F9 #FF #F4            `Producent : 
+DEFBAJT1 #EE #BA #B7 #BA
+DEFETYK @TOHUJ
+DEFBAJT1 #DE #C0 #CD #D5 #96 #BA #AA #AC            `DZWOŃ 0602373072
+DEFBAJT1 #AA #A8 #A9 #AD #A9 #AA #AD #A8
+`
+LD HL,(#4049)       @#0492
+LD A,L
+OR H
+RET Z
+LD A,(HL)
+AND A
+RET Z
+INC HL
+LD (#4049),HL
+RET
+`
+CALL @#1144         @#04A0
+RET C
+LD A,#06
+JR @#04AE
+CALL @#1144         @#04A8
+RET C
+LD A,#07
+LD (#4079),A        @#04AE
+LD HL,@#079A        @#04B1
+CALL @#10D4
+LD HL,#1111                  ` zrób autosumę III od #1111
+LD A,#55
+ADD A,(HL)          @ZN_OW
+INC HL
+BIT 5,H
+JR Z,@ZN_OW
+AND A
+`NOP
+`NOP        `dla blokady autokodów
+`NOP
+JP NZ,@__ZLE 
+RET 
+`
+`
+LD HL,#4007         @#04B9  `zrób komunikat specjalny,
+LD (#4045),HL               `tekstu DE,
+LD B,#10
+CALL @#1289
+LD A,#94
+LD (#4047),A
+LD A,#02
+LD (#4048),A
+RET
+`
+LD A,B              @#04CF  `zrób komunikat specjalny,
+LD HL,#4047                 `o stoperze Brej,
+BIT 7,(HL)
+RET NZ
+ADD A,#40
+PUSH AF
+LD DE,@#06D9
+CALL @#04B9
+POP AF
+LD (#400F),A
+LD A,#B2
+LD (#4047),A
+RET
+`
+LD A,(#4108)        @#04E9    `LED 8 razy /sekundę,
+CP #01
+JR Z,@#050B
+RES 7,(IY+#FE)
+LD DE,#403E
+LD B,#04
+LD A,(DE)           @#04F9
+BIT 7,A
+JR Z,@#0506
+AND #1E
+JR Z,@#0506
+SET 7,(IY+#FE)
+INC DE              @#0506
+INC DE
+INC DE
+DJNZ @#04F9
+CALL @#013D         @#050B
+LD A,(#408F)
+AND A
+JR Z,@#051F
+LD A,#FF
+LD (#407A),A
+LD HL,#408F
+DEC (HL)
+JR @#057A
+LD A,(#407A)        @#051F
+LD B,A
+LD A,(#4079)
+CP B
+RET Z
+LD (#407A),A
+AND A
+JR NZ,@#0532
+LD C,#00
+JR @#0553
+CP #06              @#0532
+JR NZ,@#053A
+LD C,#02
+JR @#0553
+CP #07              @#053A
+JR NZ,@#0559
+LD C,#03
+LD A,(IY+#F2)
+SUB #0A             @#0543
+JR NC,@#0543
+ADD A,#0A
+CP #08
+JR Z,@#0553
+CP #09
+JR Z,@#0553
+LD C,#02
+LD HL,#408A         @#0553
+LD (HL),C
+JR @#057A
+LD B,A              @#0559
+RLCA
+RLCA
+RLCA
+RLCA
+OR #02
+LD C,A
+LD HL,#407A
+INC HL              @#0564
+INC HL
+INC HL
+DJNZ @#0564
+LD A,(HL)
+AND #1F
+DEC HL
+OR (HL)
+JR NZ,@#0576
+LD A,C
+AND #70
+OR #01
+LD C,A
+LD HL,#408A         @#0576
+LD (HL),C
+LD IX,#4100         @#057A
+LD A,(#408A)
+RLCA
+RLCA
+RLCA
+RLCA
+AND #07
+JR NZ,@#0595
+LD A,(#408A)        @#0589
+AND #0F
+LD HL,@#1EDA        @#058E
+CALL @#0078
+JP (HL)
+LD IX,#4078         @#0595
+LD B,A
+INC IX              @#059A
+INC IX
+INC IX
+DJNZ @#059A
+BIT 7,(IX+#02)
+JR NZ,@#0589
+LD A,(#408A)
+AND #0F
+CP #02
+JR NZ,@#058E
+LD A,#04
+JR @#058E
+`
+` w Acc wychodzi liczba dni w mieciącu B roku C
+` trwa 402 tkt (można zmniejszyć do 221 tkt)
+PUSH HL             @#05B5    `(4razy wywoływana HL,BC potrzebne)
+PUSH BC
+LD HL,@#1EE4
+DEC HL
+`
+LD A,B
+INC HL              @#05BB
+DJNZ @#05BB
+`
+`PUSH BC       `propozycja dla przyspieszenia
+`LD C,B        `wykonywania procedury.
+`LD B,#00
+`ADD HL,BC
+`POP BC
+`LD A,B
+`
+CP #02
+JR NZ,@#05C9
+LD A,C
+CALL @#05CE
+JR NC,@#05C9
+INC B
+LD A,(HL)           @#05C9
+ADD A,B
+POP BC
+POP HL
+RET
+`
+`
+` lata przestępne (czy Acc jest takie)NC = nie,CY = tak
+` trwa 51 tkt,
+CP #00              @#05CE    `(2)
+RET Z
+CP #C8
+RET Z
+AND #03
+RET NZ
+SCF
+RET
+`
+LD HL,#4093         @#05D9      `kurant raz w sekundzie
+LD A,(HL)
+AND A
+RET Z                    `powróć, gdy jeszcze nie zrobione
+DEC (HL)
+LD A,#01
+LD (#4071),A             `zadaj w porze dnia
+RET
+`
+LD A,#FF            @#05E6
+LD (#407A),A
+RET
+LD A,(#4079)        @#05EC
+CP #00
+RET Z
+LD A,(#408A)
+AND #F0
+OR #01
+LD (#408A),A
+LD A,#18
+LD (#408F),A
+RET
+LD B,A              @#0602
+LD A,(#4079)        @#0603
+CP #00
+RET Z
+LD A,#18
+LD (#408F),A
+LD A,B
+JP @#0559
+LD B,#FF            @#0612
+INC B               @#0614
+SUB #0A
+JR NC,@#0614
+ADD A,#0A
+LD C,A
+LD A,B
+RLCA
+RLCA
+RLCA
+RLCA
+OR C
+RET
+CALL @zapal         @#0623
+JR @#062B
+CALL @#084A         @#0628
+LD A,(IX+#02)       @#062B
+AND #1F
+CALL @#0612
+LD C,A
+LD A,(IY+#FE)
+AND #C0
+OR C
+LD (IY+#FE),A
+LD A,(IX+#01)
+CALL @#0612
+LD (IY+#FF),A
+RET
+CALL @zapal         @#0647
+LD A,(IX+#00)
+CALL @#0612
+LD (IY+#FF),A
+LD A,(IY+#FE)
+AND #C0
+OR #0F
+LD (IY+#FE),A
+RET
+CALL @zgaś_         @#065E
+LD A,(IX+#05)
+CALL @#0612
+LD C,A
+LD A,(IY+#FE)
+AND #C0
+OR C
+LD (IY+#FE),A
+LD A,(IX+#04)
+CALL @#0612
+LD (IY+#FF),A
+RET
+LD A,B              @#067B
+OR C
+JR NZ,@#0683
+LD B,#FA
+LD C,#FA
+LD A,#30            @#0683
+ADD A,B
+LD (HL),A
+INC HL
+LD A,#30
+ADD A,C
+LD (HL),A
+INC HL
+LD (HL),#2E
+RET
+LD A,(IX+#06)       @#0690
+CP #FB
+JR C,@#06A0
+LD B,#04
+LD (HL),#2A         @#0699
+INC HL
+DJNZ @#0699
+JR @#06B8
+LD C,#12            @#06A0
+INC C               @#06A2
+SUB #64
+JR NC,@#06A2
+ADD A,#64
+LD D,A
+LD A,C
+CALL @#0612
+CALL @#0683
+LD A,D
+CALL @#0612
+CALL @#0683
+RET                 @#06B8
+`
+LD A,(#408E)        @#081D
+BIT 2,A
+RES 6,(IY+#FE)
+JR NZ,@#082C
+BIT 1,A
+JR @#0830
+BIT 7,(IY+#F1)      @#082C
+RET NZ              @#0830
+SET 6,(IY+#FE)
+RET
+`
+LD A,(#408E)        @zapal
+AND #F9
+LD (#408E),A
+RET
+`
+LD A,(#408E)        @zgaś_
+AND #F9
+OR #02
+LD (#408E),A
+RET
+LD A,(#408E)        @#084A
+AND #F9
+OR #06
+LD (#408E),A
+RET
+LD A,(IY+#FE)       @#0855
+AND #C0
+OR #0B
+LD (IY+#FE),A
+LD A,#CA
+LD (IY+#FF),A
+JP @zgaś_
+LD (HL),#2E         @#0867
+INC HL
+LD A,(IX+#05)
+AND #0F
+CALL @#0612
+CALL @#067B
+LD (HL),#2E
+INC HL
+LD A,(IX+#04)
+AND #1F
+CALL @#0612
+JP @#067B
+CALL @#0690         @#0883
+JP @#0867
+`
+LD HL,#4027         @#0889
+CALL @#0883
+LD (HL),#20
+INC HL
+CALL @#08B3
+LD B,#05
+JP @#1289
+LD A,(IX+#02)       @#089A
+AND #1F
+CALL @#0612
+CALL @#0683
+LD (HL),#3A
+INC HL
+LD A,(IX+#01)
+AND #3F             @#08AB
+CALL @#0612
+JP @#0683
+`
+LD A,(IX+#03)       @#08B3
+AND #07             @#08B6
+JR Z,@#08CC
+LD DE,@DNI_T
+DEC DE
+JR @#08C2
+`
+LD DE,@TONYM        @#08BF
+DEC DE
+LD B,A              @#08C2
+INC DE              @#08C3
+LD A,(DE)
+BIT 7,A
+JR Z,@#08C3
+DJNZ @#08C3
+RET
+LD DE,@#070B        @#08CC
+RET
+`
+LD HL,#4027         @#08D0
+CALL @#0867
+LD (HL),#20
+INC HL
+CALL @#08B3
+LD B,#03
+CALL @#1289
+LD (HL),#20
+INC HL
+CALL @#089A
+LD (HL),#00
+RET
+LD IX,#4100         @#08EA
+LD A,(#4095)
+LD HL,@#1ED2
+CALL @#0078
+JP (HL)
+LD DE,@#06B9        @#08F8
+JR @#0900
+LD DE,@#06C9        @#08FD
+LD HL,#4027         @#0900
+JP @#1287
+LD A,#20            @#0906
+LD B,#10
+JR @#0910
+LD A,#2A            @#090C
+LD B,#05
+CALL @#10B6         @#0910
+DJNZ @#0910
+RET
+BIT 7,(HL)          @#0916
+RET NZ
+LD A,(HL)           @#0919
+AND #7F
+RET Z
+CALL @#10B6
+INC HL
+JR @#0916
+`
+SUB A               @#0925    ` przeanalizuj tekst w buforze...
+LD B,#64
+LD HL,#40FE
+DEC HL              @#0929
+DEC B
+CP (HL)
+JR NZ,@#0929
+LD (HL),#20
+LD A,B
+LD (#4097),A
+CALL @#0C79
+JP @#1072
+`
+LD IX,#4100         @#0938         `oblicz adres daty IX 
+LD HL,#FFFF         @#093C         `komunikatu urzytkownika
+LD A,(IX+#05)
+AND #0F
+DEC A               @#0944
+JR Z,@#0954
+LD B,A
+LD C,#04
+CALL @#05B5
+LD D,#00
+LD E,A
+ADD HL,DE
+LD A,B
+JR @#0944
+LD A,(IX+#04)       @#0954
+AND #1F
+LD D,#00
+LD E,A
+ADD HL,DE
+SLA L
+RL H
+SLA L
+RL H
+SLA L
+RL H
+SLA L
+RL H
+LD DE,#4920
+ADD HL,DE
+RET
+`
+LD IX,#4100         @#0972         `oblicz adres daty IX 
+LD HL,@#1A75        @#0976         `komunikatu terminarza stałego
+LD A,(HL)           @#0979
+AND #1F
+INC HL
+CP (IX+#04)
+JR NZ,@#098C
+LD A,(HL)
+AND #0F
+CP (IX+#05)
+JR NZ,@#098F
+INC HL
+RET
+AND A               @#098C
+SCF
+RET Z
+LD BC,#0011         @#098F
+ADD HL,BC
+JR @#0979
+`
+LD A,#01            @#0995
+LD (#4094),A
+LD A,(#4108)        @#099A
+CP #01
+JR NZ,@#099A
+LD DE,#0000
+DEC E               @#09A4
+JR NZ,@#09A4
+DEC D
+JR NZ,@#09A4
+LD A,(#4004)        @#09AA
+CP #FF
+JR NZ,@#09AA
+POP AF
+JP @#1068
+`
+LD D,#00            @#09B5         `oblicz do HL,IX adres alarmu A
+LD E,A
+LD B,#03
+SLA E               @#09BA
+RL D
+DJNZ @#09BA
+LD H,D
+LD L,E
+SLA L
+RL H
+ADD HL,DE
+LD D,#00
+LD E,A
+SBC HL,DE
+LD DE,#41F0
+DEC DE
+ADD HL,DE
+PUSH HL
+POP IX
+RET
+`
+LD A,(IX+#01)        @#09D4   `sprawdź alarm IX
+BIT 7,A                       `trwa 282 tkt
+JR Z,@nie_s
+AND #3F
+CP (IY+#F3)                 `minuty
+JR NZ,@nie_s
+LD A,(IX+#02)
+AND #1F
+CP (IY+#F4)                 `godziny
+JR NZ,@nie_s
+LD A,(IX+#03)               `dzień tygodnia (nowy)
+AND #0F
+JR Z,@s_dat                 `hop->sprawdź datę
+BIT 3,A
+JR NZ,@s_ndt                `hop->nowy dzień tyg.
+AND #07
+CP (IY+#F5)                 `tu dzień tyg.
+JR NZ,@nie_s
+`                  tu jest NC,
+RET               `/OK->dobry dzień tygodnia/
+LD B,A           @s_ndt `zachowaj warunek
+LD A,(IY+#F5)                  `08=PNPT
+CP #07                         `09=SONI
+JR Z,@soni_
+CP #01
+JR Z,@soni_
+LD A,#08             `PNPT
+JR #02
+LD A,#09         @soni_
+CP B
+JR NZ,@nie_s
+`                  tu jest NC,
+RET               `/OK->dobry new week day/
+`
+LD A,(IX+#04)    @s_dat
+AND #1F
+RET Z
+CP (IY+#F6)        `dzień miesiąca
+JR NZ,@nie_s
+LD A,(IX+#05)
+AND #0F
+CP (IY+#F7)        `miesiąc
+RET Z
+SCF              @nie_s  `war nie spełniony
+RET
+`
+`
+LD D,#00         @#0A11       `wykonaj alarm IX
+LD A,(IX+#07)                 `trwa 2628 tkt
+AND #07                      `sound alarmu
+JR NZ,@RTYUI
+LD D,#03                     `zapamiętaj TON dla komun
+LD A,(IX+#05)    @RTYUI 
+AND #F0
+BIT 7,A                      `czy jest komunikat
+JR Z,@#0A32                  `hop->brak
+OR D
+LD (#403E),A                 `bajt sterujący komunikatu
+PUSH IX
+POP DE
+LD HL,#0008
+ADD HL,DE
+LD DE,#414E
+LD (#403C),DE
+LD BC,#0010
+LDIR                         `przeładuj tekst komunikatu
+LD A,(IX+#07)       @#0A32
+AND #07                      `sound alarmu
+JR Z,@#0A50
+LD (#4070),A                 `zrób dźwięk
+SUB A                        `\
+LD (#4091),A                 `|wygaś dżemkę
+RES 1,(IY+#FD)               `/
+LD A,(IX+#06)       @#0A50   `teraz urządzenia
+LD B,#04
+LD HL,#807F
+PUSH BC             @#0A55
+PUSH AF
+PUSH HL
+AND #03
+DEC A
+JR NZ,@n_wył
+LD A,(IY+#FD)   @n_zał `załącz urz(HL)
+OR H
+LD (IY+#FD),A
+JR @j_omi         `omiń resztę
+DEC A           @n_wył
+JR NZ,@n_sto
+LD A,(IY+#FD)      `wyłącz urz(HL)
+AND L
+LD (IY+#FD),A
+JR @j_omi         `omiń resztę
+DEC A           @n_sto
+JR NZ,@j_omi
+PUSH HL
+CALL @#1656       `stoper Brej
+SET 7,(HL)        `startuj go
+POP HL
+JR @n_zał         `i włącz urządzenie
+POP HL          @j_omi
+POP AF
+POP BC
+RRCA           `przesuń urządzenie z alarmu
+RRCA
+RRC H          `przesuń bit(y) do z/w urządz
+RRC L
+DJNZ @#0A55
+BIT 6,(IX+#01)       `czy wielokrotny?
+RET NZ
+RES 7,(IX+#01)       `kasuj ten alarm
+RET
+`
+LD A,#00            @#0A75   `zrób zmianę czasu o 1h
+LD (#408B),A                 `zeruj krok przeszukiania alarmów
+DEC B
+JR NZ,@#0A85
+LD HL,#408E
+BIT 5,(HL)
+RET NZ
+SET 5,(HL)
+DEC (IY+#F4)
+JR @#0A88
+INC (IY+#F4)        @#0A85
+LD A,(#4108)        @#0A88
+AND A
+JR Z,@#0A93
+LD DE,@#06E9        @#0A93
+JP @#04B9
+`
+LD IX,#410B         @#0A99   ` oblicza momenty zmiany czasu
+LD HL,#031F
+CALL @#03B4
+LD (#413A),HL
+LD A,#02
+LD (#413C),A
+LD HL,#0A1F
+CALL @#03B4
+LD (#413D),HL
+LD A,#03
+LD (#413F),A
+RET
+`
+LD IX,#4087         @#0ABA
+LD B,#05
+CALL @#0AD3
+LD B,#04
+PUSH BC             @#0AC5
+DEC IX
+DEC IX
+DEC IX
+CALL @#0B1E
+POP BC
+DJNZ @#0AC5
+RET
+BIT 6,(IX+#02)      @#0AD3
+JR Z,@#0B1E
+BIT 7,(IX+#02)
+RET Z
+INC (IX+#00)
+LD A,(IX+#00)
+CP #3C
+RET C
+SUB A
+LD (IX+#00),A
+INC (IX+#01)
+LD A,(IX+#01)
+CP #3C
+RET C
+SUB A
+LD (IX+#01),A
+INC (IX+#02)
+LD A,(IX+#02)
+AND #1F
+CP #18
+RET C
+PUSH BC             @#0B03
+SUB A
+LD (IX+#00),A
+LD (IX+#01),A
+LD (IX+#02),A
+CALL @#04CF
+POP BC
+PUSH BC
+CALL @#0603
+POP BC
+LD A,#05
+CP B
+JP NZ,@#16AA
+RET
+BIT 7,(IX+#02)      @#0B1E
+RET Z
+LD A,(IX+#00)
+AND A
+JR Z,@#0B2D
+DEC (IX+#00)
+RET
+LD A,#3B            @#0B2D
+LD (IX+#00),A
+LD A,(IX+#01)
+AND A
+JR Z,@#0B3C
+DEC (IX+#01)
+RET
+LD A,#3B            @#0B3C
+LD (IX+#01),A
+LD A,(IX+#02)
+AND #1F
+JR Z,@#0B03
+DEC (IX+#02)
+RET
+LD A,(#4109)        @#0B4C
+CP #67
+JR Z,@#0B5C
+SUB A
+LD (#4079),A
+LD (#4095),A
+JR @#0B71
+LD A,(#4079)        @#0B5C
+AND A
+JR NZ,@#0B64
+LD A,#06
+LD (#4079),A        @#0B64
+CP #06
+LD A,#01
+JR Z,@#0B6E
+INC A
+LD (#4095),A        @#0B6E
+LD A,(#4108)        @#0B71
+AND A
+RET NZ
+LD A,#03
+LD (#4095),A
+RET
+LD A,(#4096)        @#0B8E
+CP #67
+RET NZ
+LD A,#1E
+LD (#4092),A
+RET
+`
+`  wykonaj: wyświetl przybyły jako komunikat.
+EX DE,HL           @RS_ko    `do HL adres #4099
+LD DE,#4007
+LD (#4045),DE
+LD BC,#0010
+LDIR
+LD A,#B2             `jednoraz, sound, LED,
+LD (#4047),A
+JP @#$OK$
+`
+EX DE,HL          @RS_ur   `ustal stan urządzeń z komputera,
+LD A,(HL)
+AND #F0
+LD B,A
+LD A,(IY+#FD)
+AND #0F
+OR B
+LD (IY+#FD),A
+LD HL,#407D            `sprawdź idące stopery i jeśli któryś idzie to,
+LD BC,#0400                  `włącz urządzenie, które on reprezentuje.
+BIT 7,(HL)       @poptl
+JR Z,@krops
+SET 0,C
+RRC C            @krops
+INC HL
+INC HL
+INC HL
+DJNZ @poptl
+LD A,(IY+#FD)
+OR C                         `zostaw je włączone.
+LD (IY+#FD),A
+JP @#$OK$                    `potwierdź wykonanie
+`
+EX DE,HL          @RS_st   `prześlij ustalone (max.) wartości stoperów
+LD DE,#4140
+LD BC,#000C
+LDIR
+`
+LD B,#04          `przeładuj wartości komunikatów
+LD HL,#4140
+LD DE,#407B
+PUSH BC      @w_st_
+LD BC,#0003       `do tych, które stoją
+PUSH HL
+PUSH DE
+PUSH BC
+INC DE
+INC DE
+LD A,(DE)
+DEC DE
+DEC DE
+BIT 7,A
+JR NZ,@OpInn
+LDIR
+DEC DE
+LD A,(DE)
+AND #1F
+OR #40
+LD (DE),A
+POP BC       @OpInn
+POP DE
+POP HL
+ADD HL,BC
+EX DE,HL
+ADD HL,BC
+EX DE,HL
+POP BC
+DJNZ @w_st_
+JP @#$OK$
+`
+EX DE,HL            @RS_ak    `kasuj wszystkie alarmy/rozłącz
+LD A,(HL)               `sprawdź, czy pozostałe bajty są =#00 !
+AND A
+JP NZ,@#$NO$            `nie alarmy, nie rozłącz,
+INC HL
+OR (HL)
+JP Z,@AlArY             `alarmy kasuj,
+CP #76
+JP NZ,@#$NO$           `nie rozumiem
+SUB A                  `rozłącz z komputerem
+LD (#4067),A             `tryb blokady urzytkownika
+LD (#4068),A             `czas samowyłącznika
+RET                     `tutaj nie wysyła już komunikatu, że zrozumiał!
+`
+LD HL,#41F0         @AlArY    `kasuj wszystkie alarmy,
+LD DE,#0017                     `HL= adres pierwszego (zerowego) alarmu
+SUB A                           `długość jednego alarmu =#0017=&23
+LD B,#50                        `ile alarmów-1  (&80=#50)
+LD (HL),A           @()*()
+ADD HL,DE
+DJNZ @()*()
+JP @#$OK$
+`
+LD HL,#41F0         @RS_al      `prześlij alarm
+LD DE,#0017
+LD B,#50
+BIT 7,(HL)          @$%^&*
+JR Z,@$%^qw
+ADD HL,DE
+DJNZ @$%^&*
+JP @#$OO$         `wyśli komunikat, że nie wykonano, (bo brak miejsca).
+LD C,E              @$%^qw      `tutaj zapisz ten alarm
+LD B,D
+EX DE,HL
+LD HL,#4099
+LDIR
+JP @#$OK$
+`
+EX DE,HL            @RS_km       `prześlij kmnkt użytkownika,
+INC HL
+LD A,(HL)
+AND A
+JP Z,@#$NO$          `podane miesiące=0,
+CP #0D
+JP NC,@#$NO$         `podane miesiące>12,
+LD B,#00
+LD C,A               `miesiąc,
+DEC BC               `       -1(!),
+DEC HL               `(HL)=podane dni,
+LD A,(HL)
+AND A
+JP Z,@#$NO$          `podane dni=0,
+DEC A                `Acc=podane dni-1,
+LD HL,@#1EE4         `tabela liczby dni w miesiącu,
+ADD HL,BC            `(HL)=max liczba dni w podanym miesiącu,
+CP (HL)              `wynik=(podane_dni-1)-(max dni),
+JP NC,@#$NO$         `podane dni>max dni w tym miesiącu,
+LD IX,#4095          `dobre dni i miesiące,
+CALL @#093C          `oblicz adres w/g IX,
+EX DE,HL             `adres dnia do DE<-tu,
+LD HL,#409B          `z tąd,
+LD BC,#0010          `16 znaków,
+LDIR                 `przeładuj komunikat,
+JP @#$OK$            `potwierdź.
+`
+EX DE,HL          @RS_cz      `PC żąda LORDA!
+LD A,#67
+LD B,#03
+CP (HL)           @!!!!!
+JP NZ,@ine04
+INC HL
+DJNZ @!!!!!
+LD DE,#40C1
+LD A,#1C          `&28 długość komunikatu,
+LD (DE),A
+INC DE
+LD HL,@#0D46
+DEC HL
+LD A,(HL)
+LD (DE),A        `pierwszy kodujący bajt,
+INC DE
+LD BC,#0004
+ADD HL,BC
+LD A,(HL)
+LD (DE),A        `drugi kodujący bajt,
+INC DE
+LD BC,#000B
+ADD HL,BC
+LD A,(HL)
+LD (DE),A        `trzeci kodujący bajt,
+INC DE
+LD HL,@#07A8
+LD BC,#000A         `od 11 znaku...
+ADD HL,BC
+LD BC,#0018          `#18=&24 bajtow LORD'a,
+LDIR
+CALL @outrs               `oblicz autosumę i gotuj do wysłania
+LD A,#FE                  `czyli gotuj go do odbioru !!!
+LD (#4097),A
+RET
+`
+LD HL,#4099     @ine04     `inne (prócz LORD'a) możliwości dla #04.
+LD A,(HL)
+CP #67
+JP NZ,@#$NO$           `nie rozumiem!
+INC HL
+LD A,(HL)
+INC HL
+AND A
+JR NZ,@nie0r
+LD A,(HL)       `#67 #00 -> dzwięk(HL) zrób,
+`
+AND A
+JR NZ,@!##$%
+LD (#4071),A       `było śpi!
+LD (#4078),A       `aktualnie wykonywany=0
+`
+LD (#4070),A   @!##$%  `zadaj sound,
+SUB A
+LD (#4091),A            `zeruj licznik dżemki.
+JP @#$OK$
+DEC A          @nie0r
+JR NZ,@nie1r
+LD A,(HL)       `#67 #01 -> steruj kurantem,
+AND #18           `zostaw tylko bity dla kuranta,
+LD B,A
+LD A,(#408E)
+AND #E7           `nie zmieniaj innych bitów,
+OR B              `zadaj kuranta,
+LD (#408E),A      `zapamiętaj.
+JP @#$OK$
+DEC A          @nie1r
+JR NZ,@nie2r
+`
+LD A,(HL)
+BIT 7,A
+PUSH AF
+AND #03
+INC A
+LD B,A
+POP AF
+JR Z,@stopu
+CALL @#16AA           `stoper start
+JP @#$OK$
+CALL @#169F    @stopu `stoper halt
+JP @#$OK$
+`
+DEC A          @nie2r
+JR NZ,@nie3r
+LD A,(HL)       `#67 #03 #00-> żądanie czasu,
+AND A
+JP NZ,@#$NO$     `gdy nie #00 to ERROR
+JP @PO_go
+JP @#$NO$   @nie3r
+`
+`
+LD A,#14        @PO_go    `przygotuj pocztę dla godziny...
+LD DE,#40C1               `zapisz 20 znakowy komunikat
+LD (DE),A
+INC DE
+LD HL,#40FF
+LD BC,#000B
+LDIR
+LD HL,#4161
+LD BC,#0004
+LDIR
+LD HL,#40CA
+LD A,(#416F)
+LD (HL),A
+INC HL
+LD A,(#4171)
+LD (HL),A
+CALL @outrs               `oblicz autosumę i gotuj do wysłania
+LD A,#FE                  `czyli gotuj go do odbioru !!!
+LD (#4097),A
+RET
+`
+EX DE,HL       @RS_ub     `bezwzględnie ustaw zegar.
+LD A,(HL)               `pierwszy bajt to tryb!
+INC HL
+JR @usta1
+`
+EX DE,HL       @RS_ug     `PC przesyła godzinę do ustawienia
+LD DE,#4109
+LD A,(DE)
+CP #67
+JR Z,@PO_go              `jeśli ustawiony, to nie ustawiaj godziny-,
+`                          -tylko odpowiedz aktualną godziną.
+LD A,#03                 `tryb D dla DCF77
+AND #03        @usta1    `dla pewności
+LD (#4162),A   
+LD DE,#4100
+LD BC,#0007
+LDIR        
+`          nie ustawiaj ułamków sekund, gdy ustawiasz z komputera!
+LD A,#67
+LD (#4109),A      `ustawiony zegar
+`
+CALL @#1426        `odświerz komunikaty dnia,
+LD A,#01
+LD (#4069),A       `czyli zrób w przyszłości #01
+JP @#$OK$          `-> oblicz momenty zmiany letni/zimowy...
+`
+LD HL,(#4099)          @RS_rw      `ustaw pory dnia
+LD (#406A),HL
+LD (#406C),HL
+LD HL,(#409B)
+LD (#406E),HL
+JP @#$OK$
+`
+` tabela procedur dla RS232,
+DEFETYK @Tb_Rs
+DEFBAJT1 #0A               ` ile ich jest,
+DEFBAJT1 #11                ` komunikat na LCD,
+DEFTABE RS_ko     
+DEFBAJT1 #02                ` ustal stan urządzeń,
+DEFTABE RS_ur
+DEFBAJT1 #0D                ` prześlij stopery,
+DEFTABE RS_st
+DEFBAJT1 #03                ` kasuj wszystkie alarmy/rozłącz
+DEFTABE RS_ak
+DEFBAJT1 #18                ` prześlij alarm,
+DEFTABE RS_al
+DEFBAJT1 #13                ` prześlij komunikat użytkownika,
+DEFTABE RS_km
+DEFBAJT1 #04                ` odczytaj LORD'a/i inne,
+DEFTABE RS_cz
+DEFBAJT1 #08                ` o godzinie- wymiana informacji,
+DEFTABE RS_ug
+DEFBAJT1 #05                ` ustaw pory dnia,
+DEFTABE RS_rw
+DEFBAJT1 #09                ` ustaw bezwzględnie zegar i tryb.
+DEFTABE RS_ub
+`
+`w każdym z dwu ponoższych przypadków odblokuj odbiór;
+`odpowiedz na komendę z PC, że OK! (i pauza 5/250)
+`czyli wyślij: #FF #03 #AA #76 #as.
+`odpowiedz na komendę z PC, że źle -nie rozumiem (i pauza 5/250)
+`czyli wyślij: #FF #03 #67 #55 #as.
+LD HL,#55AA         @#$OO$          `poczta -pamięć alarmów jest pełna,
+JR @$zapi
+LD HL,#76AA         @#$OK$          `poczta -dobrze
+JR @$zapi
+LD HL,#5567         @#$NO$          `poczta -źle
+LD A,#03            @$zapi          `zapisz 3 znakowy komunikat
+LD (#40C1),A
+LD (#40C2),HL
+CALL @outrs
+LD A,#FE             `czyli gotów już do odbioru !!!
+LD (#4097),A
+RET
+`
+LD HL,#40C1     @outrs        `wyślij informację z #40C0 (policz autosumę!)
+LD B,(HL)    
+DEC B
+SUB A
+INC HL        @#!!!#
+ADD A,(HL)
+DJNZ @#!!!#
+INC HL
+CP #FF                         `zastąp autosumę =#FF
+JR NZ,#02
+LD A,#FE
+LD (HL),A                 `zapamiętaj autosumę
+LD A,#F1                  `czyli 14 pauz (14/250)
+LD (#40C0),A
+RET
+`
+`
+RES 3,(IY+#FD)      @#0B9A
+LD HL,#4092
+LD A,(HL)
+AND A
+RET Z
+SET 3,(IY+#FD)
+DEC (HL)
+RET
+`
+LD A,(#4067)        @#0BAB
+AND A                     `jeśli jest komputer to nie rób,
+RET NZ
+LD A,#02                  `zrób tryb systemu
+LD (#4094),A
+RET
+`
+BIT 7,(IY+#FE)      @#0BB1
+RET Z
+RES 7,(IY+#FE)
+LD HL,#403E
+LD A,(#4048)
+LD E,A
+LD D,#00
+ADD HL,DE
+ADD HL,DE
+ADD HL,DE
+LD A,(HL)
+AND #E1
+LD (HL),A
+RET
+LD A,(#4006)        @#0BCB
+AND #07
+JP @#0602
+LD L,#7D            @#0BD3
+JR @#0BE1
+LD L,#80            @#0BD7
+JR @#0BE1
+LD L,#83            @#0BDB
+JR @#0BE1
+LD L,#86            @#0BDF
+LD H,#40            @#0BE1
+BIT 7,(HL)
+JR NZ,@#0BF9
+LD A,(#4006)
+AND #0F
+LD B,A
+LD A,#40
+RLCA                @#0BEF
+DJNZ @#0BEF
+XOR (IY+#FD)
+LD (IY+#FD),A
+RET
+LD A,#01            @#0BF9
+LD (#4071),A
+LD A,(#4006)
+SUB #35
+JP @#0602
+BIT 7,(IY+#FE)      @#0C06
+RET NZ
+LD HL,#403E
+LD A,(#4048)
+LD E,A
+LD D,#00
+ADD HL,DE
+ADD HL,DE
+ADD HL,DE
+LD (HL),#00
+LD A,#01
+LD (#4094),A
+RET
+`
+CALL @#08EA         @#0C1F
+LD A,#01
+CALL @#0CB9
+LD A,#02
+LD (#4039),A
+LD A,#F2
+CALL @#0CB9
+SUB A               @#0C31
+LD (#4005),A
+LD (#4097),A
+LD (#4098),A
+LD BC,#0064
+LD HL,#4099
+LD E,L
+LD D,H
+INC DE
+LD (HL),#20
+LDIR
+RET
+LD HL,@#1A59        @#0C49
+LD B,(HL)
+INC HL              @#0C4D
+CP (HL)
+INC HL
+JR Z,@#0C57
+INC HL
+DJNZ @#0C4D
+JR @#0C5C
+LD E,(HL)           @#0C57
+INC HL
+LD D,(HL)
+EX DE,HL
+JP (HL)
+LD D,#00            @#0C5C
+LD A,(#4097)
+LD E,A
+LD A,#63
+SUB E
+JR NC,@#0C6D
+RET                 @#0C67
+LD HL,#4099         @#0C6D
+ADD HL,DE
+LD A,(#40FE)
+LD (HL),A
+LD HL,#4097
+INC (HL)
+LD HL,#4097         @#0C79
+LD A,(HL)
+INC HL
+SUB (HL)
+JR NC,@#0C84
+DEC (HL)
+JR @#0C79
+LD A,(HL)           @#0C84
+ADD A,#0F
+DEC HL
+SUB (HL)
+JR NC,@#0C8F
+INC HL
+INC (HL)
+JR @#0C84
+LD A,#40            @#0C8F
+LD (#4039),A
+LD A,#06
+CALL @#0CB9
+LD HL,#4099
+LD D,#00
+LD A,(#4098)
+LD E,A
+ADD HL,DE
+LD B,#0F
+LD A,(HL)           @#0CA5
+CALL @#0CB9
+INC HL
+DJNZ @#0CA5
+LD HL,#4097
+LD A,(HL)
+INC HL
+SUB (HL)
+ADD A,#40
+LD (#4039),A
+LD A,#06
+PUSH AF             @#0CB9
+LD A,(#403A)        @#0CBA
+AND A
+JR NZ,@#0CBA
+POP AF
+LD (#403A),A
+RET
+LD HL,#4097         @#0CC5
+LD A,(HL)
+AND A
+RET Z
+DEC (HL)
+JR @#0C79
+LD HL,#4097         @#0CCF
+LD A,(HL)
+CP #64
+RET NC
+INC (HL)
+JR @#0C79
+LD A,(#4097)        @#0CDA
+LD E,A
+LD C,A
+LD D,#00
+LD HL,#4099
+ADD HL,DE
+LD E,L
+LD D,H
+DEC DE
+LD A,#65
+SUB C
+RET Z
+LD B,#00
+LD C,A
+CP #65
+JP NC,@#0C67
+LDIR
+JP @#0CC5
+LD HL,#40FC         @#0D03
+LD E,L
+LD D,H
+DEC HL
+LD A,(#4097)
+LD C,A
+LD A,#63
+SUB C
+LD B,#00
+LD C,A
+RET Z
+LDDR
+INC HL
+LD (HL),#20
+JP @#0C79
+LD HL,#40FE         @#0D1E
+LD B,#65
+DEC HL              @#0D23
+LD A,#20
+CP (HL)
+JR NZ,@#0D2B
+DJNZ @#0D23
+LD A,B              @#0D2B
+LD (#4097),A
+JP @#0C79
+`
+SUB A               @#0D32    ` rozkaz LORD
+LD (#4039),A
+LD A,#F2
+CALL @#10B6                   ` ustaw kursor na pozycji "0"
+CALL @#090C                   ` pisz 5 gwiazdek
+LD HL,@#07A8
+LD B,#2A                   `````````pierwszy bajt kodujący,
+LD A,(HL)           @#0D46
+ADD A,B
+XOR #A5                    `````````drugi bajt kodujący,
+CALL @#10B6
+INC HL
+DJNZ @#0D46
+CALL @#090C
+LD B,#41                   `````````trzeci bajt kodujący,
+LD A,(HL)           @#0D55
+SUB B
+RLCA
+RLCA
+CALL @#10B6
+INC HL
+DJNZ @#0D55
+CALL @#10E3
+AND A
+RET
+`
+LD A,(DE)           @#0D76
+SUB #30
+RET C
+CP #0A
+CCF
+RET C
+INC DE
+RET
+CALL @#0D76         @#0D80
+RET C
+PUSH AF
+CALL @#0D76
+JR NC,@#0D8C
+POP AF
+RET
+LD B,A              @#0D8C
+POP AF
+LD H,A
+ADD A,A
+ADD A,A
+ADD A,H
+ADD A,A
+ADD A,B
+RET
+`
+` tabela procedur skoków 8 razy na sekundę
+DEFETYK @#1EBC
+DEFBAJT1 #07                  ` ile ich jest
+DEFBAJT1 #1A                  ` sound
+DEFTABE #02F8
+DEFBAJT1 #1C                  ` LCD & Manager
+DEFTABE #03CB
+DEFBAJT1 #1E                  ` key system  `zamieniłem sound z key system
+DEFTABE #16B3
+DEFBAJT1 #18                  ` zamek i RS232
+DEFTABE Rs232
+DEFBAJT1 #06                  ` LED
+DEFTABE #04E9
+DEFBAJT1 #16                  ` obliczanie autosumy II
+DEFTABE AS2LI
+DEFBAJT1 #14                  ` proc. wykonująca czynność w przyszłości...
+DEFTABE FUTRU
+`
+`
+LD HL,@FUTUR     @FUTRU
+LD A,(#4069)
+LD B,(HL)
+INC HL           @ne_FU
+CP (HL)
+INC HL
+LD E,(HL)
+INC HL
+LD D,(HL)
+JR Z,@JE_FU
+DJNZ @ne_FU                 `sprawdź następny...
+SUB A
+LD (#4069),A                `bo nie jest zrozumiały!!!
+RET
+EX DE,HL         @JE_FU     
+SUB A
+LD (#4069),A                `czyli wygaś go już.
+JP (HL)
+`
+`
+`tabela procedury przyszłościowej FUTRU
+DEFETYK @FUTUR
+DEFBAJT1 #01                  ` ile ich jest
+DEFBAJT1 #01                  ` oblicz letni zimowy
+DEFTABE o_l_z
+`
+`
+LD IY,#410E        @o_l_z   `dokończ ustawienie czasu z komputera,
+CALL @#0A99                 `czyli oblicz letni/ zimowy.
+LD A,#01   
+LD (#4094),A                `odświerz LED i LCD.
+RET
+`
+`
+LD A,(DE)           @#0D95
+PUSH BC
+PUSH DE
+CP #2E
+LD A,#FF
+JR Z,@#0DC9
+LD HL,#0000
+LD B,#04
+CALL @#0D76         @#0DA3
+JP C,@#0E26
+PUSH DE
+LD E,L
+LD D,H
+ADD HL,HL
+ADD HL,HL
+ADD HL,DE
+ADD HL,HL
+LD E,A
+LD D,#00
+ADD HL,DE
+POP DE
+DJNZ @#0DA3
+PUSH DE
+LD DE,#076C
+AND A
+SBC HL,DE
+POP DE
+JR C,@#0E26
+LD A,H
+AND A
+JR NZ,@#0E26
+LD A,L
+CP #FA
+JR NC,@#0E26
+LD (#4097),A        @#0DC9
+LD A,(DE)
+CP #2E
+JR NZ,@#0E26
+INC DE
+CALL @#0D80
+JR C,@#0E26
+LD B,A
+LD A,(DE)
+CP #2E
+JR Z,@#0DE6
+LD A,(#4097)
+CP #FF
+JR NZ,@#0E26
+JR @#0DF4
+INC DE              @#0DE6
+LD A,B
+LD (#4098),A
+CP #0D
+JR NC,@#0E26
+AND A
+JR Z,@#0E26
+JR @#0DFD
+LD A,(IY+#F7)       @#0DF4
+LD (#4098),A
+LD A,B
+JR @#0E02
+CALL @#0D80         @#0DFD
+JR C,@#0E26
+AND A               @#0E02
+JR Z,@#0E26
+LD B,A
+PUSH BC
+LD BC,(#4097)
+LD A,C
+CP #FF
+JR NZ,@#0E12
+LD C,#04
+CALL @#05B5         @#0E12
+POP BC
+CP B
+JR C,@#0E26
+LD HL,(#4097)
+LD A,L
+LD L,H
+LD H,A
+CALL @#100E
+POP HL
+POP BC
+AND A
+RET
+POP DE              @#0E26
+POP BC
+SCF
+RET
+LD A,(DE)           @#0E2C
+PUSH BC
+PUSH DE
+CALL @#0D80
+JR C,@#0E6E
+CP #18
+JR NC,@#0E6E
+LD (#4097),A
+LD A,(DE)
+CP #3A
+JR NZ,@#0E6E
+INC DE
+CALL @#0D80
+JR C,@#0E6E
+CP #3C
+JR NC,@#0E6E
+LD (#4098),A
+PUSH DE
+LD A,(DE)
+CP #3A
+JR NZ,@#0E61
+INC DE
+CALL @#0D80
+JR C,@#0E61
+CP #3C
+JR NC,@#0E61
+POP HL
+LD B,A
+JR @#0E64
+POP DE              @#0E61
+LD B,#00
+LD HL,(#4097)       @#0E64
+CALL @#100E
+POP HL
+POP BC
+AND A
+RET
+POP DE              @#0E6E
+POP BC
+SCF
+RET
+`
+PUSH DE             @#0E72  `poszukaj tekstu od (DE)
+LD B,#00                    `w tabeli słów kluczowych,
+LD A,(DE)           @#0E75  `wy:CY-brak słowa
+CP #61                      `   NC-jest słowo nr Acc
+JR C,@#0E85
+CP #7B
+JR NC,@#0E85
+AND #DF         `zamień (DE) na dużą literę
+LD (DE),A
+INC DE              @#0E81
+INC B
+JR @#0E75
+`
+CP #08              @#0E85
+JR C,@#0E95
+CP #10
+JR C,@#0E81
+CP #41
+JR C,@#0E95
+CP #5B
+JR C,@#0E81
+POP DE              @#0E95
+LD A,B
+CP #03
+RET C
+DEC B
+EX DE,HL
+LD DE,@#189D
+PUSH HL             @#0E9F
+PUSH BC
+INC DE              @#0EA1
+LD A,(DE)
+AND #7F
+JR Z,@#0ED8
+CP (HL)
+JR NZ,@#0EA1
+LD A,(DE)
+BIT 7,A
+JR Z,@#0EA1
+LD C,#00
+INC DE              @#0EB5
+INC HL
+INC C
+LD A,(DE)
+CP (HL)
+JR NZ,@#0ECF
+DJNZ @#0EB5
+LD B,#00
+DEC DE              @#0EC2
+LD A,(DE)
+XOR #00
+JR Z,@#0EDC
+BIT 7,A
+JR Z,@#0EC2
+INC B
+JR @#0EC2
+LD B,C              @#0ECF
+DEC DE              @#0ED0
+DJNZ @#0ED0
+INC DE
+POP BC
+POP HL
+JR @#0E9F
+POP BC              @#0ED8
+POP DE
+SCF
+RET
+LD A,B              @#0EDC
+POP BC
+POP DE
+EX DE,HL
+INC DE
+RET
+`
+LD A,(DE)           @#0EE2   `interpretuj znak 
+SUB #41                 `jako literę A-E
+RET C                   `wy->CY=błąd
+CP #05                  `    NC=Ok, zapisałem.
+CCF
+RET C
+LD B,A
+INC DE
+CALL @#100E     `zapisz do tabeli interpretera,
+AND A
+RET
+`
+LD A,(DE)           @#0EF1   `interpretuj znak(DE)
+LD B,#01                `jako jeden ze znaków...
+CP #2A
+JR Z,@#0F0C
+INC B
+CP #5E
+JR Z,@#0F0C
+INC B
+CP #40
+JR Z,@#0F0C
+INC B
+CP #1C
+JR Z,@#0F0C
+INC B
+CP #1D
+SCF
+RET NZ
+CALL @#100E         @#0F0C
+INC DE
+AND A
+RET
+`
+DEFETYK @#005C
+DEFBAJT1 #01 #01 #01 #1E #02 #01 #00 #01 
+` min,godź,dzieńtyg,dzień,miesiąc,rok,00,01
+`     01:01  niedziela 30 luty 1901
+`
+DEFETYK @#1A75                ` tablica strażnika dat - terminarza stałego
+DEFBAJT1 #01 #01              ` 01.01 Do siego roku !
+DEFBAJT1 #44 #6F #20 #73 #69 #65 #67 #6F #20 #72 #6F #6B #75 #20 #21 #20
+DEFBAJT1 #15 #01              ` 21.01 Dzień Babci
+DEFBAJT1 #20 #20 #44 #7A #69 #65 #0C #20 #42 #61 #62 #63 #69 #20 #20 #20
+DEFBAJT1 #16 #01              ` 22.01 Dzień Dziadka
+DEFBAJT1 #20 #44 #7A #69 #65 #0C #20 #44 #7A #69 #61 #64 #6B #61 #20 #20
+DEFBAJT1 #0E #02              ` 14.02 VALENTYNKI
+DEFBAJT1 #20 #20 #20 #76 #61 #6C #65 #6E #74 #79 #6E #6B #69 #20 #20 #20
+DEFBAJT1 #08 #03              ` 08.03 Dzień kobiet
+DEFBAJT1 #20 #20 #44 #7A #69 #65 #0C #20 #6B #6F #62 #69 #65 #74 #20 #20
+DEFBAJT1 #15 #03              ` 21.03 wiosna
+DEFBAJT1 #20 #20 #20 #20 #20 #77 #69 #6F #73 #6E #61 #20 #20 #20 #20 #20
+DEFBAJT1 #01 #04              ` 01.04 Prima Aprilis
+DEFBAJT1 #20 #70 #72 #69 #6D #61 #20 #61 #70 #72 #69 #6C #69 #73 #20 #20
+DEFBAJT1 #08 #05              ` 08.05 Dzień zwycięstwa
+DEFBAJT1 #44 #7A #69 #65 #0C #20 #7A #77 #79 #63 #69 #0A #73 #74 #77 #61
+DEFBAJT1 #1A #05              ` 26.05 Dzień Mamy
+DEFBAJT1 #20 #20 #20 #44 #7A #69 #65 #0C #20 #4D #61 #6D #79 #20 #20 #20
+DEFBAJT1 #01 #06              ` 01.06 Dzień dziecka
+DEFBAJT1 #20 #44 #7A #69 #65 #0C #20 #44 #7A #69 #65 #63 #6B #61 #20 #20
+DEFBAJT1 #17 #06              ` 23.06 Dzień Ojca
+DEFBAJT1 #20 #20 #20 #44 #7A #69 #65 #0C #20 #4F #6A #63 #61 #20 #20 #20
+DEFBAJT1 #01 #0B              ` 01.11 Święto zmarłych
+DEFBAJT1 #20 #20 #0E #77 #20 #7A #6D #61 #72 #0B #79 #63 #68 #20 #20 #20
+DEFBAJT1 #0B #0B              ` 11.11 ŚwNiepodległości
+DEFBAJT1 #0E #77 #4E #69 #65 #70 #6F #64 #6C #65 #67 #0B #6F #0E #63 #69
+DEFBAJT1 #18 #0C              ` 24.12 wigilia
+DEFBAJT1 #20 #20 #20 #20 #57 #69 #67 #69 #6C #69 #61 #20 #20 #20 #20 #20
+DEFBAJT1 #19 #0C              ` 25.12 Boże narodzenie
+DEFBAJT1 #42 #6F #0F #65 #20 #4E #61 #72 #6F #64 #7A #65 #6E #69 #65 #20
+DEFBAJT1 #1A #0C              ` 26.12 Boże narodzenie
+DEFBAJT1 #42 #6F #0F #65 #20 #4E #61 #72 #6F #64 #7A #65 #6E #69 #65 #20
+DEFBAJT1 #1F #0C              ` 31.12 sylwester
+DEFBAJT1 #20 #20 #20 #53 #79 #6C #77 #65 #73 #74 #65 #72 #20 #20 #20 #20
+`
+DEFBAJT1 #1F #02              ` 
+DEFBAJT1 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20
+DEFBAJT1 #1F #02              ` 
+DEFBAJT1 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20
+DEFBAJT1 #1F #02              ` 
+DEFBAJT1 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20
+DEFBAJT1 #1F #02              ` 
+DEFBAJT1 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20
+DEFBAJT1 #1F #02              ` 
+DEFBAJT1 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20 #20
+DEFBAJT1 #00 #00              ` znacznik końca tabeli`
+`
+DEFETYK @#07A8 lord...
+DEFBAJT1 #C5
+DEFBAJT1 #97 #AE #AA #9A #A3 #61 #AF #8C
+DEFBAJT1 #A3 #B6 #AC #AC #8E #AA #B1 #93
+DEFBAJT1 #6C #DA #B5 #B8 #BC #B6 #C4 #B2
+DEFBAJT1 #74 #E6 #D0 #CE #BB #B8 #C0 #C0
+DEFBAJT1 #C9 #CE #C7 #C6 #BB #BE #C7 #89
+DEFBAJT1 #84 #49 #D6 #1A #1A #5A #94 #FD
+DEFBAJT1 #93 #94 #40 #14 #94 #0F #0F #CE
+DEFBAJT1 #8A #CC #8E #37 #4A #C9 #CA #84
+DEFBAJT1 #C8 #31 #F1 #BC #80 #FF #7E #F7
+DEFBAJT1 #75 #EA #28 #EF #BC #9F #F8 #38
+DEFBAJT1 #F5 #F1 #32 #F2 #F3 #6D #1C #70
+DEFBAJT1 #2D #9C #E4 #2B #E9 #A9 #29 #E6
+DEFBAJT1 #E7 #61 #10 #53 #52 #91 #5F #8F
+DEFBAJT1 #0F #09 #00
+`
+PUSH DE             @#0F12   `interpretuj wyraz od (DE)
+PUSH BC                    `jako nazwę dnia tygodnia,
+CALL @#0E72
+JR C,@#0F2A
+CP #1A
+JR NZ,@n_pnp
+LD A,#08      `czyli pn/pt
+JR @#0XX0
+CP #1B              @n_pnp
+JR NZ,@n_son
+LD A,#09      `czyli so/ni
+JR @#0XX0
+SUB #24             @n_son  `było 1A
+JR C,@#0F2A
+INC A
+CP #08
+JR NC,@#0F2A
+POP BC              @#0XX0
+LD B,A
+POP HL
+CALL @#100E
+AND A
+RET
+SCF                 @#0F2A
+POP BC
+POP DE
+RET
+`
+PUSH DE             @#0F2E   `interpretuj wyraz od (DE)
+PUSH BC                   `jako nazwę melodyjki,
+CALL @#0E72
+JR C,@#0F46
+SUB #2B                `było 21
+JR C,@#0F46
+INC A
+CP #08
+JR NC,@#0F46
+POP BC
+LD B,A
+POP HL
+CALL @#100E
+AND A
+RET
+SCF                 @#0F46
+POP BC
+POP DE
+RET
+`
+PUSH DE             @#0F4A   `interpretuj (DE)
+PUSH BC                    `jako tekst w cudzysłowiu,
+LD A,(DE)
+CP #22
+JR NZ,@#0F64
+INC DE              @#0F51
+LD A,(DE)
+CP #20
+JR Z,@#0F51
+LD L,E
+LD H,D
+LD B,#00
+LD A,(DE)           @#0F5B
+CP #22
+INC DE
+JR Z,@#0F68
+INC B
+JR NZ,@#0F5B
+SCF                 @#0F64
+POP BC
+POP DE
+RET
+LD A,#10            @#0F68
+CP B
+JR NC,@#0F6E
+LD B,A
+CALL @#100E         @#0F6E
+POP BC
+POP HL
+AND A
+RET
+`
+PUSH DE             @#0F75   `interpretuj (DE)
+PUSH BC                    `jako A STO...itd
+LD A,(DE)
+SUB #41
+JR C,@#0FA8
+CP #04
+JR NC,@#0FA8
+LD B,A
+PUSH BC
+INC DE              @#0F82
+LD A,(DE)
+CP #20
+JR Z,@#0F82
+CALL @#0E72
+POP BC
+LD H,#00
+JR C,@#0FA1
+INC H
+CP #11
+JR Z,@#0FA1
+INC H
+CP #10
+JR Z,@#0FA1
+INC H
+CP #0C
+JR Z,@#0FA1
+LD H,#00
+CALL @#100E         @#0FA1
+POP BC
+POP HL
+AND A
+RET
+POP BC              @#0FA8
+POP DE
+SCF
+RET
+`
+PUSH DE             @#0FAC   `interpretuj (DE)
+PUSH BC                   `jako słowo kluczowe??
+CALL @#0E72
+JR C,@#0FC2
+LD B,C
+RES 6,C
+CP C
+JR NZ,@#0FC2
+BIT 6,B
+CALL NZ,@#100E
+POP BC
+POP HL
+AND A
+RET
+POP BC              @#0FC2
+POP DE
+AND A
+BIT 6,C
+RET NZ
+SCF
+RET
+`
+PUSH DE             @#0FCA  `DE=tablica wszystkich poprawnych fraz,
+PUSH BC          `BC= B=nr.rozkazu,
+`                 HL=adres w buforze tekstu wpisanego,
+`                 AF=element z tabeli możliwych fraz (do sprawdzenia),
+`                    bit 7 Acc-nie istotny,
+`                    bit 6 Acc=1 to niekoniecznie musi występować,
+AND #7F
+LD DE,@#1A40          `tablica przekładająca kody
+LD C,A                `na to, co wczytać (data, melodia...)
+AND #3F               `7 i 6 bit to inne...
+EX DE,HL
+SCF
+JR Z,@#1002            `skończyła się tablica,
+PUSH AF
+LD A,(DE)           @#0FD9
+CP #20
+JR NZ,@#0FE1
+INC DE                `omiń spację,
+JR @#0FD9
+POP AF              @#0FE1
+LD B,(HL)
+INC HL              @#0FE3
+CP (HL)
+INC HL
+JR Z,@#0FF0
+INC HL
+DJNZ @#0FE3
+CALL @#0FAC
+JR @#1002
+LD B,(HL)           @#0FF0
+INC HL
+LD H,(HL)
+LD L,B
+LD A,C
+LD BC,@#0FFB
+PUSH BC
+LD C,A
+JP (HL)
+JR NC,@#1002        @#0FFB
+BIT 6,C
+JR Z,@#1002
+AND A
+POP BC              @#1002
+EX DE,HL
+POP DE
+RET
+`
+PUSH HL             @#1006    `zeruj liczbę elementów 
+LD HL,#410E                   `w tablicy interpretera
+LD (HL),#00
+POP HL
+RET
+`
+PUSH HL             @#100E
+PUSH BC
+PUSH HL
+PUSH BC
+LD HL,#410E
+LD B,(HL)
+INC (HL)
+INC HL
+LD A,B
+AND A
+JR Z,@#1022
+INC HL              @#101C
+INC HL
+INC HL
+INC HL
+DJNZ @#101C
+POP BC              @#1022
+LD (HL),C
+INC HL
+LD (HL),B
+INC HL
+POP BC
+LD (HL),C
+INC HL
+LD (HL),B
+POP BC
+POP HL
+RET
+`
+LD B,#00            @#102E    `interpretuj tekst z bufora
+`                              @#197F to tabela danych interpretera,
+LD DE,@#197F                  `wy: NC-rozkaz Brej,
+DEC DE                        `    CY-error,
+INC DE              @#1034
+LD A,(DE)           @#1035 `Error->CY,Z
+AND A
+SCF
+RET Z
+BIT 7,A
+JR Z,@#1034       `szukaj początku frazy, hop->nie początek,
+CALL @#1006       `zeruj liczbę elementów w tabl interpretera
+LD HL,#4099       `początek interpretowanego bufora,
+INC B             `zwiększ numer rozkazu,
+JR @#104F         `sprawdź...
+LD A,(DE)           @#1046
+BIT 7,A
+JR NZ,@#1057      `hop->początek  \
+AND #7F           `               | tak i tak to koniec frazy,
+JR Z,@#1057       `koniec tablicy /
+CALL @#0FCA         @#104F  `sprawdź element Acc frazy
+INC DE               `następny element tej frazy,
+JR NC,@#1046         `OK -sprawdź go,
+JR @#1035            `Error -to nit ten element,
+PUSH DE             @#1057   `do końca mogą być tylko spacje,
+LD A,(HL)           @#1058
+CP #20                      `?spacja?
+INC HL
+JR Z,@#1058
+LD DE,#40FF                 `?koniec bufora?
+AND A
+SBC HL,DE
+POP DE
+JR C,@#1035          `hop->jest coś -nie spacja->error
+RET        `NC- OK! (?NZ= ?)
+`
+` jeden startowy alarm dla GSM, włącza stoper D o 23:00 codziennie,
+DEFETYK @alGSM
+DEFBAJT1 #C0     `jest alarm, wielokrotny, minuta=00,
+DEFBAJT1 #17     `godzina=23
+DEFBAJT1 #00     `dzień tygodnia=codziennie
+DEFBAJT1 #00     `dzień miesiąca=brak
+DEFBAJT1 #00     `bajt komuniktu, miesiąc=brak
+DEFBAJT1 #03     `włącz stoper D,
+DEFBAJT1 #00     `sound alarmu
+DEFBAJT1 #00 #00 #00 #00 #00 #00 #00 #00 `tekst komunikatu
+DEFBAJT1 #00 #00 #00 #00 #00 #00 #00 #00 `tekst komunikatu
+`
+` wartości początkowe stoperów A-D
+DEFETYK @stGSM
+`         s   m   g
+DEFBAJT1 #00 #02 #00 `A  00:02:00
+DEFBAJT1 #00 #14 #00 `B  00:20:00
+DEFBAJT1 #00 #00 #02 `C  02:00:00
+DEFBAJT1 #00 #00 #08 `D  08:00:00
+`
+`
+CALL @re_RS         @Z_VER  `resetuj RS232
+`
+LD HL,@VERSI          `przedstaw wersję
+LD (#4045),HL
+LD A,#A0
+LD (#4047),A
+`
+LD HL,@za_za          `"Zanik zasilania!"
+LD (#403C),HL
+LD A,#90              `niejednorazowy, LED, bez sound,
+LD (#403E),A
+`
+LD HL,#4137             `ustaw kod początkowy zamka
+LD A,#01      
+LD (HL),A
+INC HL
+LD A,#01            `miesiąc
+LD (HL),A
+INC HL
+LD A,#01            `
+LD (HL),A
+LD A,#03
+LD (#4162),A        `tryb D !!!
+`
+`
+LD HL,@stGSM
+PUSH HL
+LD DE,#4140
+LD BC,#000C
+PUSH BC            `przeładuj:
+LDIR                `pamięć wart stoperów
+POP BC
+POP HL
+LD DE,#407B
+LDIR                `wart aktualne stoperów
+`
+LD HL,@alGSM
+LD DE,#41F0
+LD BC,#0017
+LDIR                `załaduj alarm pierwszy,
+`
+LD A,#70
+LD (#4174),A           `ustaw jako aktywne do
+`                       mrugania: akumulator, sterownik i inne.
+`
+LD A,#10               `kurant pika,
+LD (#408E),A
+`
+LD A,(#4108)        @#1068
+CP #01
+JR Z,@#1068
+CALL @#0C1F         @#106F
+CALL @#141D         @#1072
+JR NC,@#107E
+LD A,(#4108)
+CP #01
+JR Z,@#1068
+CALL @#102E         @#107E
+JR NC,@#10A3
+LD HL,#4099
+LD A,(HL)           @#1086
+INC HL
+CP #20
+JR Z,@#1086
+LD DE,#40FE
+AND A
+SBC HL,DE
+JR NC,@#106F        @#1092
+LD HL,@#0710
+CALL @#10D4
+SUB A
+LD (#4097),A
+LD (#4098),A
+JR @#106F
+LD HL,@#19EA        @#10A3
+DEC B
+JR Z,@#10AD
+INC HL              @#10A9
+INC HL
+DJNZ @#10A9
+LD B,(HL)           @#10AD
+INC HL
+LD H,(HL)
+LD L,B
+LD BC,@#1092
+PUSH BC
+JP (HL)
+PUSH AF             @#10B6
+PUSH DE
+LD DE,#3FFF
+DEC E               @#10BB
+JR NZ,@#10BB
+DEC D
+JR NZ,@#10BB
+POP DE
+POP AF
+LD (#403A),A
+RET
+`
+LD A,(HL)           @#10C7
+AND #7F
+JR Z,@#10D4
+XOR #00
+LD (HL),A
+INC HL
+BIT 7,(HL)
+JR Z,@#10C7
+SUB A               @#10D4
+LD (#4039),A
+LD A,#F2
+CALL @#10B6
+CALL @#090C
+CALL @#0919
+CALL @#090C         @#10E3
+CALL @#0906
+LD A,(#4005)
+INC A
+INC A
+CP #04
+JR NZ,@#10F4
+LD A,#01
+LD (#4039),A        @#10F4
+LD A,#F2
+CALL @#0CB9
+RET
+`
+DEFETYK @T_KLS                `klawisze systemowe
+DEFBAJT1 #12                  ` ile ich jest
+DEFBAJT1 #31                  ` podgląd stopera A
+DEFTABE #0BCB
+DEFBAJT1 #32                  ` podgląd stopera B
+DEFTABE #0BCB
+DEFBAJT1 #33                  ` podgląd stopera C
+DEFTABE #0BCB
+DEFBAJT1 #34                  ` podgląd stopera D
+DEFTABE #0BCB
+DEFBAJT1 #35                  ` podgląd stopera E
+DEFTABE #0BCB
+DEFBAJT1 #36                  ` włącz/wyłącz urządzenie A
+DEFTABE #0BD3
+DEFBAJT1 #37                  ` włącz/wyłącz urządzenie B
+DEFTABE #0BD7
+DEFBAJT1 #38                  ` włącz/wyłącz urządzenie C
+DEFTABE #0BDB
+DEFBAJT1 #39                  ` włącz/wyłącz urządzenie D
+DEFTABE #0BDF
+DEFBAJT1 #30                  ` otwórz/zamknij zamek
+DEFTABE #0B8E
+DEFBAJT1 #4B                  ` kasuj potwierdzony komunikat
+DEFTABE #0C06
+DEFBAJT1 #53                  ` pokaż sekundy
+DEFTABE #05EC
+DEFBAJT1 #F1                  ` zrób tryb użytkownika
+DEFTABE #0BAB
+DEFBAJT1 #50                  ` potwierdź komunikat
+DEFTABE #0BB1
+DEFBAJT1 #51                  ` DOWN  (stoper E)(Q)
+DEFTABE #14E1
+DEFBAJT1 #45                  ` STOP  (stoper E)(E)
+DEFTABE #14D1
+DEFBAJT1 #57                  ` UP    (stoper E)(W)
+DEFTABE #14B9
+DEFBAJT1 #52                  ` ZERUJ (stoper E)(R)
+DEFTABE #14D8
+`
+PUSH HL             @#1101
+LD A,C
+AND A
+JR Z,@#1112
+ADD HL,BC
+DEC HL              @#1107
+LD A,(HL)
+CP #20
+JR NZ,@#1112
+DEC BC
+LD A,B
+OR C
+JR NZ,@#1107
+POP HL              @#1112
+LD A,#10
+SUB C
+LD B,#10
+SRL A
+JR Z,@#1128
+EX DE,HL
+LD (HL),#20         @#111D
+INC HL
+DEC A
+JR Z,@#1126
+DJNZ @#111D
+RET
+EX DE,HL            @#1126
+DEC B
+LD A,C              @#1128
+AND A
+JR Z,@#1138
+PUSH AF             @#112C
+LD A,(HL)
+LD (DE),A
+POP AF
+INC HL
+INC DE
+DEC A
+JR Z,@#1138
+DJNZ @#112C
+RET
+EX DE,HL            @#1138
+LD A,B
+AND A
+RET Z
+JR @#1141
+LD (HL),#20         @#113E
+INC HL
+DJNZ @#113E         @#1141
+RET
+`
+` Sekwencja włączająca LCD (#1EF0)
+DEFETYK @SWLCD
+DEFBAJT1 #07 #38 #38 #38 #38 #06 #0C #01 `
+`
+LD A,(#4109)        @#1144
+CP #67
+SCF
+RET NZ
+AND A
+RET
+CALL @#1144         @#1161
+RET C
+LD A,(#4110)
+INC A
+LD (#4079),A
+RET
+`
+LD HL,(#406A)       @#116D    `rozkaz śpi
+LD (#406C),HL          `odświerz uwcześnioną godzinę,
+LD A,(#4070)
+LD HL,#4071
+OR (HL)
+CP #04
+JR C,@inśpi           `hop->cisza lub krótki dźwięk
+SUB A
+LD (#4070),A         `\dźwięki,
+LD (#4071),A         `/
+LD (#4078),A         `-aktualny dźwięk,
+LD (#4091),A         `-licznik dżemki,
+LD (#4093),A         `-bicie kuranta,
+RES 1,(IY+#FD)       `-wyłącz blokadę sound,
+JP @JAK_k
+`
+LD A,(#406D)        @inśpi   `czy pora dnia?
+CP (IY+#F4)
+JR C,@JAK_w
+JR NZ,@JAK_k         `poza porą dnia
+LD A,(#406C)
+CP (IY+#F3)
+JR C,@JAK_w
+JR NZ,@JAK_k         `poza porą dnia
+LD A,(#406F)        @JAK_w
+CP (IY+#F4)
+JR C,@JAK_k          `poza porą dnia
+JR NZ,@PO_dn
+LD A,(#406E)
+CP (IY+#F3)
+JR Z,@JAK_k          `poza porą dnia
+`
+LD B,#04        @PO_dn  `pora dnia, gaś beep komunikatów
+LD HL,#403E
+LD A,(HL)      @tutaj
+AND #F1        `(wywal sound)
+LD (HL),A
+INC HL
+INC HL
+INC HL
+DJNZ @tutaj
+JP @#04B1    @JAK_k
+`
+LD A,(#4110)        @#1186
+CP #04
+SCF
+RET Z
+INC A
+LD B,A
+AND A
+JP @#1681
+LD A,(#4110)        @#1193
+CP #04
+SCF
+RET Z
+INC A
+LD B,A
+AND A
+JP @#1690
+`
+LD A,(#4110)        @#11A0   `stoper halt
+INC A
+CP #05
+JR Z,@#11AE
+LD B,A
+PUSH AF
+CALL @#16AA
+POP AF
+JR @#11B3
+LD HL,#4089         @#11AE   `stoper E halt
+RES 7,(HL)
+CALL @#0602         @#11B3
+AND A
+RET
+`
+` tablica dźwięków sound
+DEFETYK @SOUND
+DEFBAJT1 #01 #01 #01 #01      `cisza
+DEFBAJT1 #05 #01 #04 #02      `beep     1/2 sekundy
+DEFBAJT1 #09 #01 #08 #10      `ton      1 sekunda
+DEFBAJT1 #42 #01 #42 #10      `melodia  1 melodia
+DEFBAJT1 #C1 #13 #04 #0E      `beeper   1/2 sekundy przez 10 minut
+DEFBAJT1 #81 #71 #04 #0E      `toner    1/2 sekundy przez godzinę
+DEFBAJT1 #81 #71 #08 #10      `grajek   sekunda co 2 sekundy przez godzinę
+DEFBAJT1 #81 #71 #42 #08      `budzik   melodia co 5 sekund przez godzinę
+`        LczasH  dźw cisza
+`
+LD A,(#4110)        @#11B8  `stoper (tabela) start
+INC A
+CP #05
+JR Z,@#11C6
+LD B,A
+PUSH AF
+CALL @#169F
+POP AF
+JR @#11CB
+LD HL,#4089         @#11C6    `stoper E start
+SET 7,(HL)
+CALL @#0602         @#11CB
+AND A
+RET
+`
+LD IX,#410C         @#11D0    ` rozkaz komunikat
+CALL @#093C
+RES 7,(HL)
+EX DE,HL
+LD HL,#4114
+LD C,(HL)
+INC HL
+LD B,(HL)
+INC HL
+LD H,(HL)
+LD L,B
+LD B,#00
+LD A,C
+AND A
+JR Z,@#11F3
+PUSH DE
+CALL @#1101
+POP HL
+SET 7,(HL)
+CALL @#1454
+CALL @#1426         @#11F3
+AND A
+RET
+`
+CALL @#1144         @#1205
+RET C
+LD HL,(#4111)
+LD A,H
+LD H,L
+LD L,A
+LD (#406A),HL
+LD (#406C),HL
+LD HL,(#4115)
+LD A,H
+LD H,L
+LD L,A
+LD A,(#410E)
+CP #02
+JR NZ,@#1225
+LD (#406E),HL
+LD HL,#4099         @#1225
+PUSH HL
+LD DE,@#06F9
+CALL @#1287
+LD IX,#406B
+CALL @#089A
+LD DE,@#06FF
+CALL @#1287
+LD IX,#406D
+CALL @#089A
+INC HL
+LD (HL),#00
+POP HL
+CALL @#10D4
+AND A
+RET
+`
+LD A,(#4138)         @#124C     `rozkaz zamknij zamek
+AND A
+JP NZ,@#1715          `już jest kod zamka!
+`
+LD HL,#4110
+LD DE,#4137
+LD BC,#0003
+LDIR
+LD A,(#410E)
+AND A
+JR NZ,@#1260
+LD (#4138),A
+LD A,(#4137)        @#1260
+CP #FF
+LD A,#00
+JR NZ,@#126C
+LD (#4138),A
+LD (#4092),A        @#126C
+LD (#4096),A
+JP @#04B1                     ` pisz "Jak każesz"
+`
+` tabela procedur skoków co sekundę
+DEFETYK @#1EA6
+DEFBAJT1 #04                  ` ile ich jest
+DEFBAJT1 #00                  ` przeskok sekundy I
+DEFTABE #0241
+DEFBAJT1 #02                  ` przeskok sekundy II
+DEFTABE #0278
+DEFBAJT1 #04                  ` kurant
+DEFTABE #05D9
+DEFBAJT1 #84                  ` korekta czasu
+DEFTABE #01B5
+`
+DEFBAJT1 #34                ` bajt autosumy od #1111
+`
+DEFETYK @M_KLA                `pierwsze znaczenie klawisza
+DEFBAJT1 #20 #41 #51 #31
+DEFBAJT1 #5A #53 #57 #32
+DEFBAJT1 #58 #44 #45 #33
+DEFBAJT1 #43 #46 #52 #34
+DEFBAJT1 #56 #47 #54 #35
+DEFBAJT1 #42 #48 #59 #36
+DEFBAJT1 #4E #4A #55 #37
+DEFBAJT1 #4D #4B #49 #38
+DEFBAJT1 #F3 #4C #4F #39
+DEFBAJT1 #F2 #F1 #50 #30
+`          drugie znaczenie klawisza
+DEFBAJT1 #20 #08 #02 #31
+DEFBAJT1 #0F #0E #03 #32
+DEFBAJT1 #22 #44 #0A #33
+DEFBAJT1 #09 #46 #10 #34
+DEFBAJT1 #3A #47 #54 #35
+DEFBAJT1 #2E #48 #59 #36
+DEFBAJT1 #0C #4A #55 #37
+DEFBAJT1 #F4 #4B #49 #38
+DEFBAJT1 #F3 #0B #0D #39
+DEFBAJT1 #F2 #F1 #2A #30
+`
+LD A,(#4110)        @#1275    ` rozkaz "melodia"
+LD (#4070),A        @#1278
+SUB A               
+LD (#4078),A
+LD (#4091),A
+RES 1,(IY+#FD)
+RET
+`
+LD B,#00            @#1287
+LD A,(DE)           @#1289
+JR @#1291
+LD A,(DE)           @#128C
+BIT 7,A
+JR NZ,@#129C
+AND #7F             @#1291
+JR Z,@#129C
+XOR #00
+LD (HL),A
+INC HL
+INC DE
+DJNZ @#128C
+LD (HL),#00         @#129C
+RET
+`
+LD HL,#408E         @#129F
+RES 5,(HL)
+LD HL,#410E
+LD A,(HL)
+AND A
+JP Z,@ZE_A1
+LD (#4066),A
+INC HL
+LD B,A
+DEC B
+JR Z,@#12DC
+INC HL              @#12B4
+LD A,(HL)
+LD (IY+#F6),A
+INC HL
+LD A,(HL)
+LD (IY+#F7),A
+INC HL
+LD A,(HL)
+LD (IY+#F8),A
+LD IX,#4100
+CALL @#133F
+LD (IY+#F5),A
+PUSH HL
+PUSH BC
+CALL @#0A99
+POP BC
+POP HL
+INC HL
+CALL @#1426
+SUB A
+CP B
+JR Z,@#12FC
+LD A,(HL)           @#12DC
+AND #3F
+CP #3E
+JR Z,@#12B4
+INC HL
+LD A,(HL)
+LD (IY+#F2),A
+INC HL
+LD A,(HL)
+LD (IY+#F4),A
+INC HL
+LD A,(HL)
+LD (IY+#F3),A
+LD A,#FF
+LD (IY+#F1),A
+LD A,#67
+LD (#4109),A
+`
+LD A,#06               `wyświetlanie gadziny,
+LD (#4079),A
+`
+SUB A
+LD (#4162),A
+`
+LD A,#67            @#12FC
+LD (#4066),A
+JP @#04B1
+LD A,(#4112)        @#1312
+CP #FF
+JR NZ,@#131F
+LD A,(IY+#F8)
+LD (#4112),A
+LD IX,#410C         @#131F
+CALL @#133F
+CALL @#08B6
+PUSH DE
+LD HL,#4099
+CALL @#0883
+LD (HL),#2D
+INC HL
+POP DE
+CALL @#1287
+LD HL,#4099
+CALL @#10D4
+AND A
+RET
+`
+PUSH BC             @#133F   `oblicz jaki dzień tygodnia był w 
+LD D,#01
+LD A,(IX+#06)
+LD B,A
+AND A
+JR Z,@#1359
+LD C,#00
+LD A,C              @#134B
+CALL @#05CE
+JR NC,@#1352
+INC D
+INC D               @#1352
+CALL @#137B
+INC C
+DJNZ @#134B
+LD C,(IX+#06)       @#1359
+LD A,(IX+#05)
+AND #0F
+LD B,A
+DEC B
+JR Z,@#136F
+CALL @#05B5         @#1365
+ADD A,D
+LD D,A
+CALL @#137B
+DJNZ @#1365
+LD A,(IX+#04)       @#136F
+AND #1F
+ADD A,D
+LD D,A
+CALL @#137B
+POP BC
+RET
+`
+LD A,D              @#137B
+SUB #07             @#137C
+JR Z,@#1382
+JR NC,@#137C
+ADD A,#07           @#1382
+LD D,A
+RET
+`
+LD A,(#410E)        @#1386
+CP #02
+SCF
+RET Z
+AND A
+JR NZ,@#1397
+LD A,(#408E)
+OR #18
+JR @#13AC
+LD A,(#410F)        @#1397
+CP #10
+JR NZ,@#13A5
+LD A,(#408E)
+AND #E7
+JR @#13AC
+LD A,(#408E)        @#13A5
+AND #E7
+OR #10
+LD (#408E),A        @#13AC
+JP @#04B1
+LD A,(#4110)        @#13B4
+LD B,A
+INC B
+CP #04
+JR Z,@#13DC
+LD C,A
+LD A,(#410E)
+CP #02
+LD A,C
+SCF
+RET NZ
+LD HL,#4140
+AND A
+JR Z,@#13D2
+INC HL              @#13CC
+INC HL
+INC HL
+DEC A
+JR NZ,@#13CC
+CALL @#13FA         @#13D2
+CALL @#1656
+CALL @#0603
+RET
+LD A,(#410E)        @#13DC
+CP #03
+JR C,@#13EA
+LD A,(#4118)
+CP #02
+SCF
+RET NZ
+PUSH AF             @#13EA
+LD HL,#4087
+CALL @#13FA
+POP AF
+JR NZ,@#13F6
+SET 6,(HL)
+CALL @#0603         @#13F6
+RET
+LD A,(#4114)        @#13FA
+LD (HL),A
+INC HL
+LD A,(#4116)
+LD (HL),A
+INC HL
+LD A,(#4115)
+LD (HL),A
+RET
+`
+CALL @#1610         @#141D
+RET C
+CALL @#0C49
+JR @#141D
+`
+PUSH HL             @#1426    `odświerz komunikaty dnia
+PUSH DE
+PUSH BC
+PUSH AF
+CALL @#0972       
+LD (#4042),HL
+LD A,#00
+JR C,@polki
+LD A,#80
+LD (#4044),A        @polki
+`                  13- tego w piątek jako kmnkt terminarza
+BIT 7,A
+JR NZ,@OBEJD
+LD A,(IY+#F5)
+CP #06             `06=PIĄTEK
+JR NZ,@OBEJD
+LD A,(IY+#F6)
+CP #0D             `#0D=&13
+JR NZ,@OBEJD
+LD HL,@13PIA
+LD (#4042),HL
+LD A,#80
+LD (#4044),A
+`
+CALL @#0938          @OBEJD
+LD (#403F),HL
+SUB A
+BIT 7,(HL)
+JR Z,@polek
+LD A,#80
+LD (#4041),A         @polek
+POP AF
+POP BC
+POP DE
+POP HL
+RET
+`
+LD A,(#410E)        @#143F  `rozkaz komunikat,
+AND A
+JR NZ,@#1454
+LD A,(IY+#F6)            `przypisz dzisiejszy dzień
+LD (#4110),A
+LD A,(IY+#F7)
+LD (#4111),A
+CALL @#1426
+CALL @#0C31         @#1454
+LD IX,#410C
+LD HL,#4099
+LD DE,@KOMUN
+CALL @#1287
+LD (HL),#20
+INC HL
+CALL @#0867
+LD (HL),#20
+INC HL
+PUSH HL
+CALL @#093C
+BIT 7,(HL)
+POP DE
+JR Z,@#14A0
+LD A,#22
+LD (DE),A
+INC DE
+LD B,#10
+LD A,(HL)           @#147C
+AND #7F
+LD (DE),A
+INC HL
+INC DE
+DJNZ @#147C
+LD A,#22
+LD (DE),A
+INC DE
+PUSH DE
+CALL @#0976
+POP DE
+JR C,@#14AF
+LD A,#26
+LD (DE),A
+INC DE
+LD A,#22            @#1493
+LD (DE),A
+INC DE
+LD BC,#0010
+LDIR
+LD (DE),A
+INC DE
+JR @#14AF
+PUSH DE             @#14A0
+CALL @#0976
+POP DE
+JR NC,@#1493
+LD HL,@#072F
+EX DE,HL
+CALL @#1287
+EX DE,HL
+SUB A               @#14AF
+LD (DE),A
+LD HL,#4099
+CALL @#10D4
+AND A
+RET
+LD A,(#4089)        @#14B9
+AND #1F
+OR #C0
+LD (#4089),A        @#14C0
+LD A,#05
+JP @#0602
+LD A,(#4089)        @#14C8
+AND #1F
+OR #80
+JR @#14C0
+LD A,(#4089)        @#14D1
+AND #7F
+JR @#14C0
+SUB A               @#14D8
+LD (#4087),A
+LD (#4088),A
+JR @#14C0
+LD A,(#4089)        @#14E1
+LD HL,(#4087)
+AND #1F
+OR H
+OR L
+JR NZ,@#14C8
+LD HL,#3B3B
+LD A,#97
+LD (#4087),HL
+LD (#4089),A
+JR @#14C0
+`
+SUB A               @#14FA    ` ROZKAZ alarm'(y wyświetl)
+LD (#4005),A                      `mode KEY
+CALL @#09B5           `oblicz adres alarmu Acc
+LD DE,#0017             `tyle bajtów ma alarm
+LD B,#50                `tyle jest wszystkich alarmów
+BIT 7,(IX+#01)      @#1506       `czy wolny
+JR Z,#01                `hop->ten wolny
+INC A                   `jest alarm, a więc dodaj jeden
+ADD IX,DE               `IX=adres następnego
+DJNZ @#1506             `szukaj dalej
+AND A                  `Acc=liczba alarmów
+JR NZ,@DALEJ            `jeśli więcej niz jeden, to napisz to
+LD HL,@#072F            `napisz, że nie ma alarmów,
+CALL @#10D4                   `pisz text HL w gwiazdkach
+AND A
+RET
+LD HL,#4099         @DALEJ
+CALL @#0612
+CALL @#067B            `zamień liczbę na tekst
+LD (HL),#00
+LD HL,#4099
+CALL @#10D4            `wypisz w gwiazdkach, ile jest alarmów
+`
+LD A,(#4004)
+CP #4B            `kasowanie wszystkich alarmów to 'K' 
+JR NZ,@#15a1
+` tutaj kasuj wszystkie alarmy,
+LD HL,#41F0        `kasuj wszystkie alarmy,
+LD DE,#0017        `HL= adres pierwszego (zerowego) alarmu
+SUB A              `długość jednego alarmu =#0017=&23
+LD B,#50           `ile alarmów-1  (&80=#50)
+LD (HL),A           @()*)(
+ADD HL,DE
+DJNZ @()*)(
+LD HL,@KASUJ
+CALL @#10D4       `pisz "kasuje !"
+JR @#14FA
+`
+LD B,#FF            @#15a1
+INC B               @#151A
+LD A,#50            @JE_RA
+CP B
+JR NC,#02
+AND A
+RET
+PUSH BC
+LD A,B
+CALL @#09B5
+POP BC
+BIT 7,(IX+#01)
+JR Z,@#151A
+PUSH BC          
+CALL @#156A   `wyświetl alarm IX...
+LD A,(#4004)
+POP BC
+CP #FF  
+JR Z,@#151A
+CP #4B            `kasowanie to 'K' !
+JR NZ,@CZY_E
+RES 7,(IX+#01)
+LD HL,@KASUJ
+CALL @#10D4
+JP @#14FA           `wyświetl jeszcze raz alarmy
+CP #45              @CZY_E
+JR NZ,@CZY_P
+RES 7,(IX+#01)
+POP AF              @EDYTU
+JP @#0925
+CP #F1              @CZY_P  `czy powielić?
+JR Z,@EDYTU
+CP #51                      `czy Q(jeszcze raz)
+JR Z,@JE_RA
+AND A 
+RET
+`
+CALL @ODDAL         @#156A   `wyświetl alarm IX...
+`            @ODDAL to przedłuż samoprzełącznik na tryb systemu
+CALL @#0C31        `CLS
+LD DE,@#189D
+INC DE
+LD HL,#4099
+CALL @#1287         `pisz słowo alarm ,
+BIT 6,(IX+#01)         `czy gwiazdkę (wielokrotny)
+LD (HL),#20
+INC HL
+JR Z,@#1582
+LD (HL),#2A
+INC HL
+LD A,(IX+#04)       @#1582
+AND #1F
+CALL NZ,@#0867          `jeśli jest to pisz datę
+LD (HL),#20
+INC HL
+LD A,(IX+#03)
+BIT 3,A
+JR NZ,@ne_dt
+AND #07
+JR Z,@#159F
+CALL @#08B6           `jeśli jest gotuj do pisania dnia tygodnia,
+JR @popdt
+`
+AND #07       @ne_dt
+LD A,#1A        `numer wyrazu
+JR Z,#01
+INC A
+LD DE,@#189D         `tabela słów kluczowych
+CALL @#08C2          `znajdź wyraz Acc dla #1289 (jak @#08B6)
+`
+LD B,#05            @popdt   `max 5 liter!
+CALL @#1289           `przepisz
+LD (HL),#20
+INC HL
+CALL @#089A         @#159F    `gotuj do pisania godzin i minut
+LD (HL),#20
+INC HL
+BIT 7,(IX+#05)
+JR Z,@#15C0             `hop-> brak komunikatu
+LD (HL),#22           `komunikat
+INC HL
+EX DE,HL
+PUSH IX
+POP HL
+LD BC,#0008
+ADD HL,BC
+EX DE,HL
+LD B,#10
+CALL @#1289         `...pisz
+LD (HL),#22
+INC HL
+INC HL
+LD A,(IX+#07)       @#15C0
+AND #07
+JR Z,@#15D0
+CALL @#08BF          `melodię
+CALL @#1287          `pisz
+LD (HL),#20
+INC HL
+LD A,(IX+#06)       @#15D0
+LD B,#04
+RLCA                @#15D5
+RLCA
+PUSH BC
+PUSH AF
+AND #03
+CALL NZ,@#15EC
+POP AF
+POP BC
+DJNZ @#15D5
+LD (HL),#00
+LD HL,#4099
+CALL @#10D4
+AND A
+RET
+`
+PUSH AF             @#15EC  `urządzenie pisz
+LD A,#45
+SUB B
+LD (HL),A
+INC HL
+INC HL
+POP AF
+LD C,#11
+DEC A
+JR Z,@#1600
+LD C,#10
+DEC A
+JR Z,@#1600
+LD C,#0C
+LD A,C              @#1600
+LD DE,@#189D
+CALL @#08C2
+LD B,#03
+CALL @#1289
+LD (HL),#20
+INC HL
+RET
+`
+LD HL,#4004         @#1610    ` czekaj na key użytkownika
+LD A,(HL)           @#1613
+CP #FF
+JR NZ,@#1613
+LD DE,#01CF
+DEC E               @#161B
+JR NZ,@#161B
+DEC D
+JR NZ,@#161B
+LD A,(HL)           @#1621
+CP #FF
+JR Z,@#1621
+LD (#40FE),A
+LD A,(#4108)
+AND A
+SCF
+RET NZ
+LD A,(#40FE)
+CP #F2
+JR Z,@#1638
+AND A
+RET
+LD A,(#4005)        @#1638
+INC A
+CP #02
+JR C,@#1641
+SUB A
+LD (#4005),A        @#1641
+INC A
+INC A
+CP #04
+JR NZ,@#164C
+LD A,#01
+LD (#4039),A        @#164C
+LD A,#F2
+CALL @#0CB9
+JR @#1610
+`
+PUSH BC             @#1656 `obl adres stpr rejB (1-4)
+PUSH DE                    `trwa: 198tkt
+DEC B                      `i przeładuj go.
+LD A,B
+ADD A,A
+ADD A,B
+LD C,A
+LD B,#00
+LD HL,#407B
+ADD HL,BC
+EX DE,HL
+LD HL,#4140
+ADD HL,BC
+LD BC,#0003
+LDIR
+DEC DE
+EX DE,HL
+POP DE
+POP BC
+RET
+`
+PUSH BC             @#1675
+LD HL,#08F7
+RLC H               @#1679
+RLC L
+DJNZ @#1679
+POP BC
+RET
+`
+PUSH AF             @#1681
+PUSH HL
+CALL @#1675
+LD A,(IY+#FD)
+OR H
+LD (IY+#FD),A
+POP HL
+POP AF
+RET
+`
+PUSH AF             @#1690
+PUSH HL
+CALL @#1675
+LD A,(IY+#FD)
+AND L
+LD (IY+#FD),A
+POP HL
+POP AF
+RET
+`
+PUSH HL             @#169F        `zrób stoper Brej start
+CALL @#1656
+SET 7,(HL)
+CALL @#1681
+POP HL
+RET
+`
+PUSH HL             @#16AA         `zrób stoper Brej stop
+CALL @#1656
+CALL @#1690
+POP HL
+RET
+`
+LD A,(#4108)        @#16B3         `obsługa key'ów systemu
+CP #01
+RET NZ
+LD HL,#4004
+LD A,(HL)
+CP #FF
+RET Z
+LD (HL),#FF
+INC HL
+INC HL
+LD (HL),A
+BIT 1,(IY+#FD)
+JR NZ,@#16DC
+LD A,(#4078)
+CP #03
+JR C,@#16DC
+SET 1,(IY+#FD)
+LD A,#0A
+LD (#4091),A
+RET
+LD A,(HL)           @#16DC
+LD HL,@T_KLS
+LD B,(HL)
+INC HL              @#16E1
+CP (HL)
+INC HL
+LD E,(HL)
+INC HL
+LD D,(HL)
+JR Z,@#16EC
+DJNZ @#16E1
+RET
+EX DE,HL            @#16EC
+JP (HL)
+`
+LD A,(#4138)        @#16EE    `rozkaz otwórz zamek
+AND A
+JR Z,@#170A
+LD A,(#410E)
+AND A
+JR Z,@#1715
+LD HL,#4110
+LD DE,#4137
+LD B,#03
+LD A,(DE)           @#1702
+CP (HL)
+JR NZ,@#1715
+INC HL
+INC DE
+DJNZ @#1702
+LD A,#67            @#170A
+LD (#4096),A
+LD A,#18
+LD (#4092),A
+RET
+`
+LD A,#03            @#1715   `wypisz, że zły kod zamka!!!
+CALL @#1278
+LD HL,@#0764
+CALL @#10D4
+AND A
+RET
+`
+SUB A               @#1722        `zapisz alarm (z rozkazu)
+PUSH AF             @#1723
+CALL @#09B5             `oblicz do IX adres alarmu Acc
+POP AF
+BIT 7,(IX+#01)
+JR Z,@#173B             `hop->tu wolny alarm
+INC A                   `sprawdź następny
+CP #50                  `maks liczba alarmów
+JR C,@#1723
+LD HL,@#0740            `pisz, że pamięć alarmów jest pełna
+CALL @#10D4
+AND A
+RET
+`
+INC HL              @#173B  `tu wolny alarm,
+AND A
+JR Z,@#174E
+PUSH HL
+EX DE,HL
+LD HL,#41F0
+LD BC,#0017
+RES 7,(HL)
+LDIR               `przeładuj alarm pierwszy na tą pozycję,
+POP HL
+SET 7,(HL)
+`
+LD IX,#41F0         @#174E   `adres alarmu pierwszego,
+DEC IX
+LD HL,#41F0
+LD B,#17
+LD (HL),#00         @#1757
+INC HL
+DJNZ @#1757                 `wyczyść pierwszy alarm
+`
+LD HL,#410E
+LD B,(HL)                   `Brej elementów,
+INC HL              @#1760
+PUSH BC
+LD A,(HL)
+AND #3F
+INC HL
+PUSH HL
+CALL @#1785            `analizuj element z (HL)
+POP HL
+POP BC
+INC HL
+INC HL
+DJNZ @#1760              `następny element...
+`
+LD A,(IX+#03)            `jeśli jest równocześnie
+AND #0F                  `dzień tygodnia i data
+JR Z,@#177E              `to zrób błąd...
+LD A,(IX+#04)
+AND #0F
+SCF
+RET NZ
+SET 7,(IX+#01)      @#177E   `w przeciwnym razie
+JP @#156A                `wyświetl alarm
+`
+SUB #38             @#1785
+JR Z,@#17D4
+DEC A
+JR Z,@#17DD
+DEC A
+JR Z,@#17BD
+DEC A
+JR Z,@#17B8
+DEC A
+DEC A
+JR Z,@#17A8
+DEC A
+JR Z,@#179E
+LD A,(HL)
+LD (IX+#03),A
+RET
+LD A,(HL)           @#179E
+LD (IX+#04),A
+INC HL
+LD A,(HL)
+LD (IX+#05),A
+RET
+INC HL              @#17A8
+LD A,(HL)
+LD (IX+#02),A
+INC HL
+LD A,(IX+#01)
+AND #C0
+OR (HL)
+LD (IX+#01),A
+RET
+LD A,(HL)           @#17B8
+LD (IX+#07),A
+RET
+LD B,#00            @#17BD
+LD C,(HL)
+INC HL
+LD A,(HL)
+INC HL
+LD H,(HL)
+LD L,A
+LD DE,#41F7
+CALL @#1101
+LD A,(IX+#05)
+OR #90
+LD (IX+#05),A
+RET
+LD A,(HL)           @#17D4
+CP #01
+RET NZ
+SET 6,(IX+#01)
+RET
+LD B,(HL)           @#17DD
+INC B
+INC HL
+INC HL
+LD H,(HL)
+LD A,#FC
+RRC H               @#17E4
+RRC H
+RRCA
+RRCA
+DJNZ @#17E4
+AND (IX+#06)
+OR H
+LD (IX+#06),A
+RET
+`
+CALL @#0A99         @#17FD
+JP @#182E
+`
+DEFETYK @#189D
+DEFBAJT1 #00                  `? początek ?
+DEFBAJT1 #C1 #4C #41 #52 #4D  ` ALARM =1
+DEFBAJT1 #C1 #55 #54 #4F      ` AUTO =2
+DEFBAJT1 #C4 #41 #54 #41      ` DATA =3
+DEFBAJT1 #C4 #5A #49 #45 #0C  ` DZIEń =4
+DEFBAJT1 #C8 #41 #4C #54      ` HALT =5
+DEFETYK @KOMUN                ` wyraz komunikat
+DEFBAJT1 #CB #4F #4D #55 #4E #49 #4B #41 #54` KOMUNIKAT =6
+DEFBAJT1 #CC #4F #52 #44      ` LORD =7
+DEFBAJT1 #CF #54 #57 #0D #52 #5A` OTWóRZ =8
+DEFBAJT1 #D0 #4F #4B #41 #0F  ` POKAż =9
+DEFBAJT1 #D3 #54 #41 #52 #54  ` START =A
+DEFBAJT1 #C3 #5A #41 #53      ` CZAS =B
+DEFBAJT1 #D3 #54 #4F #50 #45 #52` STOPER =C
+DEFBAJT1 #D0 #52 #4F #44 #55 #43 #45 #4E #54` PRODUCENT =D
+DEFBAJT1 #8E #50 #49          ` śPI =E
+DEFBAJT1 #D5 #53 #54 #41 #57  ` USTAW =F
+DEFBAJT1 #D7 #59 #0B #08 #43 #5A` WYłąCZ =10
+DEFBAJT1 #DA #41 #0B #08 #43 #5A` ZAłąCZ =11
+DEFBAJT1 #DA #41 #4D #45 #4B  ` ZAMEK =12
+DEFBAJT1 #DA #41 #4D #4B #4E #49 #4A` ZAMKNIJ =13
+DEFBAJT1 #DA #45 #47 #41 #52  ` ZEGAR =14
+DEFBAJT1 #C3 #5A #45 #0E #09  ` CZEść =15
+DEFBAJT1 #CB #55 #4B #55 #0B #4B #41` KUKUłKA =16
+DEFBAJT1 #CC #45 #54 #4E #49  ` LETNI =17
+DEFBAJT1 #DA #49 #4D #4F #57 #59` ZIMOWY =18
+DEFBAJT1 #D3 #45 #4B #55 #4E #44 #59` SEKUNDY =19
+DEFBAJT1 #D0 #4E #50 #54` PNPT =1A
+DEFBAJT1 #D3 #4F #4E #49` SONI =1B
+`
+`osiem niewykorzystanych:
+DEFBAJT1 #C1 #4C #41 #52 #4D #59  ` AKARMY =1D
+DEFBAJT1 #C1 #4B #54 #59 #57 #4E #45  ` AKTYWNE =1E
+DEFBAJT1 #DA #59 #47 #41 #52  ` ZYGAR
+DEFBAJT1 #C3 #59 #45 #0E #09  ` CYEść
+DEFBAJT1 #CB #59 #4B #55 #0B #4B #41` KYKUłKA
+DEFBAJT1 #CC #59 #54 #4E #49  ` LYTNI
+DEFBAJT1 #DA #59 #4D #4F #57 #59` ZYMOWY
+DEFBAJT1 #D3 #59 #4B #55 #4E #44 #59` SYKUNDY
+`
+DEFETYK @DNI_T
+DEFBAJT1 #CE #49 #45 #44 #5A #49 #45 #4C #41` NIEDZIELA
+DEFBAJT1 #D0 #4F #4E #49 #45 #44 #5A #49 #41 #0B #45 #4B` PONIEDZIAłEK
+DEFBAJT1 #D7 #54 #4F #52 #45 #4B` WTOREK
+DEFBAJT1 #8E #52 #4F #44 #41  ` śRODA
+DEFBAJT1 #C3 #5A #57 #41 #52 #54 #45 #4B` CZWARTEK
+DEFBAJT1 #D0 #49 #08 #54 #45 #4B` PIąTEK
+DEFBAJT1 #D3 #4F #42 #4F #54 #41` SOBOTA
+`
+DEFETYK @TONYM
+DEFBAJT1 #C2 #45 #45 #50      `BEEP
+DEFBAJT1 #D4 #4F #4E          `TON
+DEFBAJT1 #CD #45 #4C #4F #44 #49 #41`MELODIA
+DEFBAJT1 #C2 #45 #50 #45 #52  `BEPER
+DEFBAJT1 #D4 #4F #4E #45 #52  `TONER
+DEFBAJT1 #C7 #52 #41 #4A #45 #4B`GRAJEK
+DEFBAJT1 #C2 #55 #44 #5A #49 #4B`BUDZIK
+DEFBAJT1 #00
+`
+LD HL,#413A         @#1803
+JR @#1810
+LD HL,#408E         @#1808
+RES 5,(HL)
+LD HL,#413D
+LD A,(#4116)        @#1810
+AND A
+SCF
+RET NZ
+LD A,(#4115)
+AND A
+SCF
+RET Z
+CP #17
+CCF
+RET C
+LD A,(#4110)
+LD (HL),A
+INC HL
+LD A,(#4111)
+LD (HL),A
+INC HL
+LD A,(#4115)
+LD (HL),A
+LD HL,#4099         @#182E
+PUSH HL
+LD DE,@#06E9
+CALL @#1287
+LD IX,#4136
+CALL @#0867
+LD A,(#413C)
+CALL @#186F
+LD (HL),#2B
+INC HL
+LD (HL),#29
+INC HL
+LD (HL),#20
+INC HL
+LD (HL),#69
+INC HL
+LD (HL),#20
+INC HL
+LD IX,#4139
+CALL @#0867
+LD A,(#413F)
+CALL @#186F
+LD (HL),#2D
+INC HL
+LD (HL),#29
+INC HL
+LD (HL),#00
+POP HL
+CALL @#10D4
+AND A
+RET
+LD (HL),#20         @#186F
+INC HL
+CALL @#08AB
+LD (HL),#3A
+INC HL
+SUB A
+CALL @#08AB
+LD (HL),#28
+INC HL
+RET
+`
+`
+LD A,(#4067) @resRS   `resetuj RS232 gdy nie odebrał jeszcze nic,
+AND A                 `gdy =0 to nie ma blokady trybu użytkownika!
+RET NZ
+SUB A        @re_RS    `resetuj RS232
+LD BC,#A001
+OUT (C),A
+OUT (C),A
+OUT (C),A
+LD A,#40
+OUT (C),A
+LD A,#4E
+OUT (C),A
+DEC C
+IN A,(C)
+IN A,(C)
+INC C
+LD A,#07
+OUT (C),A
+RET
+`
+CALL @#081D         @#1BDF    `      co drugie NMI
+CALL @#1CF6
+CALL @KLAWI
+`
+LD A,(#4100)     `sekundy,
+CP #33
+JR NZ,@BZ_z1         `jeśli nie 51 sekunda to odpuść
+LD A,(#40FF)
+CP #33               `w #33 (&51) ułamku sekundy,
+JR NZ,@BZ_z1
+LD BC,#E003
+LD A,#88
+OUT (C),A            `odświerz LEDy
+CALL @resRS          `RS232 resetuj, gdy nie używany.
+`
+LD A,(IY+#FF)       @BZ_z1
+LD BC,#E000
+LD HL,#408E
+BIT 0,(IY+#FD)
+JR NZ,@#1C02
+BIT 0,(HL)
+JR Z,@#1C04
+BIT 6,(IY+#F1)
+JR Z,@#1C04
+LD A,#FF            @#1C02
+OUT (C),A           @#1C04
+LD A,(IY+#FE)
+LD BC,#E001
+BIT 0,(IY+#FD)
+JR NZ,@#1C23
+BIT 0,(HL)
+JR Z,@#1C25
+BIT 6,(IY+#F1)
+JR Z,@#1C25
+AND #C0
+OR #0F
+JR @#1C25
+LD A,#0F            @#1C23
+OUT (C),A           @#1C25
+LD A,(IY+#FD)
+AND #F8
+BIT 2,(IY+#FD)
+JR Z,@#1C33
+SUB A
+LD BC,#C001         @#1C33
+OUT (C),A
+LD BC,#E002   `TERAZ
+IN A,(C)
+AND #F0
+LD D,A
+LD A,(IY+#FC)
+AND #0F
+OR D
+LD (IY+#FC),A
+BIT 1,(IY+#FD)
+JR Z,@#1C53
+AND #FE
+OUT (C),A           @#1C53
+RET
+`
+LD HL,(#415F)       @AS2LI      ` autosuma II (8 razy na sekundę)
+BIT 5,H                         ` (#0000 - #1FFF)
+RET NZ
+SUB A
+LD B,#40
+ADD A,(HL)          @MODA2
+INC HL
+BIT 5,H
+JR NZ,@KONCZ
+DJNZ @MODA2
+LD (#415F),HL       @KONCZ
+LD HL,#415E
+ADD A,(HL)
+LD (HL),A
+RET
+`
+CALL @#1CC0         @#1C56  `czekaj aż będzie gotów...
+JR NZ,@#1C56
+RET
+`
+LD E,#00            @#1C5C
+LD BC,#C001         @#1C5E
+LD A,(IY+#FD)
+AND #F8
+OR E
+OUT (C),A
+RET
+`
+LD E,#00            @#1C6B
+JR @#1C71
+LD E,#04            @#1C6F
+PUSH BC             @#1C71
+LD BC,#C000
+OUT (C),A
+CALL @#1C9B
+CALL @#1C5C
+POP BC
+RET
+`
+LD A,#99            @#1C80 `in
+LD BC,#C003
+OUT (C),A
+RET
+`
+LD A,#88            @#1C89 `out
+LD BC,#C003
+OUT (C),A
+RET
+`
+CALL @#1C5E         @#1C9B
+OR #01
+OUT (C),A
+RET
+`
+LD E,#02            @#1CA3
+JR @#1CA9
+LD E,#06            @#1CA7
+PUSH BC             @#1CA9
+CALL @#1C80
+CALL @#1C9B
+LD BC,#C000
+IN A,(C)
+PUSH AF
+CALL @#1C5C
+CALL @#1C89
+POP AF
+POP BC
+RET
+`
+CALL @#1CA3         @#1CC0
+BIT 7,A
+RET
+`
+PUSH DE             @#1CC6
+LD D,A
+CALL @#1C56
+LD A,D
+CALL @#1C6B
+POP DE
+RET
+`
+PUSH DE             @#1CD1
+LD D,A
+CALL @#1C56
+LD A,D
+CALL @#1C6F
+POP DE
+RET
+`
+PUSH DE             @#1CDC
+LD D,A
+CALL @#1CC0
+PUSH AF
+LD A,D
+CALL Z,@#1C6B
+POP AF
+POP DE
+RET
+`
+PUSH DE             @#1CE9
+LD D,A
+CALL @#1CC0
+PUSH AF
+LD A,D
+CALL Z,@#1C6F
+POP AF
+POP DE
+RET
+`
+` lista procedur LCD
+DEFETYK @#1E6D
+DEFBAJT1 #07                  ` ile ich jest
+DEFBAJT1 #05                  ` przesuń LCD w lewo
+DEFTABE #1DF0
+DEFBAJT1 #04                  ` przesuń LCD w prawo
+DEFTABE #1DF0
+DEFBAJT1 #01                  ` zrób na LCD cls
+DEFTABE #1D9D
+DEFBAJT1 #02                  ` zrób na LCD lewo
+DEFTABE #1D87
+DEFBAJT1 #03                  ` zrób na LCD prawo
+DEFTABE #1D78
+DEFBAJT1 #06                  ` zrób na LCD POSition
+DEFTABE #1D92
+DEFBAJT1 #F2                  ` zrób na LCD ustaw kursor
+DEFTABE #1D62
+`
+` tabela adresów procedur LED
+DEFETYK @#1EDA
+DEFTABE #0855                 ` blee
+DEFTABE #0647                 `    :00 sekundy
+DEFTABE #0628                 `  12:34 godziny/minuty (mrugaj dwukropkiem)
+DEFTABE #065E                 `  01 31 miesiące/dni
+DEFTABE #0623                 `  12:34 godziny/minuty (świeć dwukropek)
+`
+LD HL,@#1E6D        @#1CF6
+LD B,(HL)
+LD A,(#403A)
+INC HL              @#1CFD
+CP (HL)
+INC HL
+JR Z,@#1D1F
+INC HL
+DJNZ @#1CFD
+AND A
+RET Z
+CALL @#1CE9
+RET NZ
+CP #4F
+JP C,@#1D70
+LD A,#CF
+CALL @#1C6B
+LD A,#05
+LD (#403A),A
+LD A,#20
+LD (#4038),A
+RET
+LD A,(HL)           @#1D1F
+INC HL
+LD H,(HL)
+LD L,A
+JP (HL)
+`
+LD HL,@SWLCD        @#1D24
+LD B,(HL)
+INC HL              @#1D28
+LD A,(HL)
+CALL @#1C6B
+LD DE,#04FF
+DEC E               @#1D30
+JR NZ,@#1D30
+DEC D
+JR NZ,@#1D30
+DJNZ @#1D28
+LD HL,@M_PLZ
+LD B,#08
+PUSH BC             @#1D3D
+LD C,B
+DEC C
+SLA C
+SLA C
+SLA C
+SET 6,C
+LD B,#08
+LD A,B              @#1D4A
+DEC A
+OR C
+PUSH BC
+CALL @#1CC6
+LD A,(HL)
+INC HL
+CALL @#1CD1
+POP BC
+DJNZ @#1D4A
+POP BC
+DJNZ @#1D3D
+LD A,#01
+CALL @#1CC6
+RET
+`
+` adresy procedur nagłówków LCD (tworzących nagłóki w buforze)
+DEFETYK @#1ED2
+DEFTABE #08FD                 `Czas nieznany
+DEFTABE #0889                 `1997.12.31 ponie
+DEFTABE #08D0                 `.12.31 pon 23:59
+DEFTABE #08F8                 `Twoje życzenie
+`
+LD IX,#4162          @K_NO_
+INC (IX+#05)
+LD A,(#4162) 
+AND #70
+CALL NZ,@2faza
+`
+LD A,(#4167)  
+AND A
+JR NZ,@SKOOK        `przeskok minuty więc
+RES 3,(IX+#00)      `zeruj błąd w minucie
+LD A,(#4162)     @SKOOK
+AND #70
+JR NZ,@SKOUP
+LD A,#FF
+LD (#4167),A       `gdy brak bitu to sekFR=-1
+`
+LD A,(#4162)    @SKOUP   `ustal błąd w minucie
+BIT 4,A
+JR NZ,@BLAAD
+AND #60
+CP #60
+JR NZ,@OLEJJ
+SET 3,(IX+#00)        @BLAAD
+LD (IX+#01),#00
+RET                  `już nie synchronizuj!!!
+`
+LD A,(#4163)      @OLEJJ 
+CP #05              `wskaźnik 5 poprawnych sekund
+JR NC,@KOCZZ
+INC (IX+#01)
+RET
+`
+LD HL,#416E          @KOCZZ 
+`
+LD A,(#4162)
+AND #60
+JR Z,@mnelo         `jeśli brak sekundy to nie zwiększaj!!!
+INC (HL)            `licznik poź w minucie zwiększ
+`
+LD A,(#4164)         @mnelo
+CP #80
+LD B,#FD
+JR C,@HOP10
+LD B,#03
+LD A,(IY+#F1)     @HOP10 `przysp(zwolni) o 3/250 sek,
+ADD A,B
+LD (IY+#F1),A
+LD A,(#4164)          `zajmij się też wsk rozsynchr
+ADD A,B
+LD (#4164),A
+`
+LD HL,#4167          `zajmij się tym bitem
+LD A,(#4162)
+AND #70
+JR Z,@AN_US          `bez bitu- analizuj/ustaw.
+`
+LD A,(HL)
+CP #14               `\pomiń bity o numerach
+RET C                `/0-&19...
+RET Z                `20bit powin=1,ale też pomiń.
+INC HL
+CP #1D               `do (#1D=&28+1) bitu minuty -8,
+JR C,@_bit_
+INC HL
+CP #24               `do (#24=&35+1) bitu godziny -7,
+JR C,@_bit_
+INC HL
+CP #2A               `do (#2A=&41+1) bitu dni m-ca -6,
+JR C,@_bit_
+INC HL
+CP #2D               `do (#2D=&44+1) bitu dni tyg -3,
+JR C,@_bit_
+INC HL
+CP #32               `do (#32=&49+1) bitu mies-5(+1),
+JR C,@_bit_
+INC HL
+CP #3A               `do (#3A=&57+1) bitu rok -8,
+JR C,@_bit_
+DEC HL
+RET NZ               `(#3A=&58)parz daty,-do miesiąca
+BIT 6,(IX+#00)     @_bit_
+LD A,(HL)
+SCF
+JR NZ,@HOP20
+CCF
+RRA                @HOP20
+LD (HL),A
+RET
+`
+`analizuj i ustaw -wywoływana przy zerowej sekundzie.
+`trwa ~3335 taktów.
+LD A,(#4108)              @AN_US   `dodane 980606,
+AND A                       `aby blokować DCF77 gdy tryb użytkownika.
+RET Z                       `=#00 to użytkownika
+`
+CALL @ANALI
+BIT 2,(IX+#00)
+CALL Z,@ustaw
+LD HL,#4168
+LD B,#06
+LD (HL),#00      @HOP50 `zeruj dane z przekazu.
+INC HL
+DJNZ @HOP50
+RET
+`
+`pomocnicza -analizuje parzystość i wartości
+`trwa 2278 taktów
+SET 2,(IX+#00)      @ANALI 
+BIT 3,(IX+#00)      
+RET NZ             `czy bez błędu w minucie ->zostań
+LD HL,#4168 
+CALL @paryt       
+RET C                `minuty
+LD A,(HL)
+AND #7F
+CALL @WAR_A
+LD (HL),A
+CP #3C               `>=&60
+RET NC
+INC HL
+CALL @paryt          `godziny
+RET C
+LD A,(HL)
+RRCA
+AND #3F
+CALL @WAR_A
+LD (HL),A
+CP #18               `>=&24
+RET NC
+INC HL
+CALL @paryt          `dni miesiąca
+LD D,A
+LD A,(HL)
+RRCA
+RRCA
+AND #3F
+CALL @WAR_A
+LD (HL),A
+RET Z                `=&0
+CP #20               `>=&32
+RET NC
+INC HL
+CALL @paryt          `dni tygodnia
+ADD A,D
+LD D,A
+LD A,(HL)
+RLCA
+RLCA
+RLCA
+AND #07
+RET Z                 `=&0
+INC A                 `IZA:poniedziałek=2
+CP #08                `FR :poniedziałek=1
+JR C,@KOCZE
+LD A,#01
+LD (HL),A          @KOCZE 
+INC HL
+CALL @paryt          `miesiąc
+ADD A,D
+LD D,A
+LD A,(HL)
+RRCA
+RRCA
+AND #1F
+CALL @WAR_A
+LD (HL),A
+RET Z                `=&0
+CP #0D               `>=&13
+RET NC
+INC HL
+CALL @paryt          `rok
+ADD A,D
+RRCA
+RET C
+LD A,(HL)
+CALL @WAR_A
+CP #62               `=&98
+JR NC,@HOP40         `skok gdy >=1998
+ADD A,#64            `+100 lat gdy rok miejszy niż 98
+LD (HL),A        @HOP40
+RES 2,(IX+#00)       `zeruj błąd bo poprawna analiza
+RET
+`
+`sprawdza ramkę czasu:
+`   -czy zsynchronizowane,
+`   -czy takie same daty (dni m-ca i miesiąc),
+`   -czy godzina <> 1max,
+`   -czy minuty <> 2max,
+` wynik BIT =0 to OK.
+` trwa 283 takty
+SET 2,(IX+#00)    @spr_C
+LD A,(#4164)       `wskaźnik rozsynchroniz
+CP #15
+JR C,@DOBAR
+CP #EB              `ramka: +-20/250 sekundy
+RET C
+LD A,(#416A)     @DOBAR
+CP (IY+#F6)         `dni miesiąca
+RET NZ
+LD A,(#416C)
+CP (IY+#F7)         `miesiące
+RET NZ
+LD A,(#4169)
+SUB (IY+#F4)         `godziny
+INC A               `dopuszczalne:(#FF,#00,#01)
+CP #03              `dopuszczalne:(#00,#01,#02)
+RET NC
+LD A,(#4168)
+SUB (IY+#F3)        `minuty
+INC A               `dopuszczalne:(#FE,#FF,#00,#01,#02)
+INC A
+CP #05
+RET NC
+RES 2,(IX+#00)
+RET
+`
+`ustaw gdy (C i w ramce) lub D
+`trwa 762 takty.
+LD HL,#4170       @ustaw
+INC (HL)            `zwiększ licznik poź w godzinie,
+LD A,(#4162)      
+AND #03
+CP #02
+RET C
+JR NZ,@jestD
+CALL @spr_C
+BIT 2,(IX+#00)
+RET NZ
+`                       ustaw zegar
+LD A,(#4168)    @jestD 
+AND A                  `gdy minuty =00
+RET Z                  `to pwróć 
+DEC A                  ` -DEC i komunikaty itd...
+LD (IY+#F3),A          `minuty
+`
+LD A,#3B               `=&59 SEKUND!
+LD (IY+#F2),A          `sekundy
+LD A,#67
+LD (#4109),A           `zaznacz że ustawiony zegar
+`
+LD A,(#4162)     
+AND #03
+CP #03
+JR NZ,@jessC
+`
+LD A,(#4169)        `tylko dla D!
+LD (IY+#F4),A       `godziny
+LD A,(#416A)  
+LD (IY+#F6),A       `dni miesiąca
+LD A,(#416B)
+LD (IY+#F5),A       `dni tygodnia
+LD A,(#416C)
+LD (IY+#F7),A       `miesiące
+LD A,(#416D)
+LD (IY+#F8),A       `lata
+CALL @#1426         `odśwież komunikaty dnia,
+`
+LD A,(IY+#F3)      @jessC  `zapamiętaj godzinę 
+LD (#4172),A               `i minutę ustawienia
+LD A,(IY+#F4)              `zegara w/g FR.
+OR #C0                     `7,6bit=1!
+LD (#4173),A
+SUB A
+LD (#4161),A         `zeruj licznik godzin bez przekazu
+RET
+`
+`druga faza-kmnkt i odśwież komun dnia
+BIT 6,(IX+#11)       @2faza
+RET Z
+RES 6,(IX+#11)
+LD HL,#4162       
+LD A,(HL)
+AND #03
+CP #03                
+RET NZ             `powrót gdy był inny niż D,
+BIT 7,(IX+#11)
+JR Z,@KOPKA        `gdy ustawiony to,
+RES 0,(HL)         `przestawia z D na C, 
+`zrób komunikat specjalny o DCF77
+LD HL,#4007    @KOPKA `komunikat (gdy D).
+LD (#4045),HL
+CALL @zr_DT
+LD A,#B4           `LED, SOUND, jednorazowy,
+LD (#4047),A
+CALL @#0A99         `czyli oblicz momenty zmiany czasu
+RET
+`
+`zrób komunikat o zegarze
+LD HL,#4099      @ZE_KM
+PUSH HL
+CALL @zr_DT
+INC HL
+LD (HL),#00
+POP HL
+CALL @#10D4
+AND A
+RET
+`
+LD A,(#4039)        @#1D62
+AND #03
+LD (#4107),A
+OR #0C
+CALL @#1CDC
+RET NZ
+SUB A               @#1D70
+LD (#403A),A
+LD (#403B),A
+RET
+CALL @#1CA3         @#1D78
+AND #0F
+CP #0F
+LD A,#14
+CALL NZ,@#1CDC      @#1D81
+RET NZ
+JR @#1D70
+CALL @#1CA3         @#1D87
+AND #0F
+JR Z,@#1D70
+LD A,#10
+JR @#1D81
+LD A,(#4039)        @#1D92
+OR #80
+CALL @#1CDC
+RET NZ
+JR @#1D70
+LD A,(#403B)        @#1D9D
+AND A
+JR NZ,@#1DBC
+LD A,#06
+CALL @#1CDC
+RET NZ
+LD A,(#4107)
+AND #03
+OR #0C
+CALL @#1C6B
+LD A,#01
+LD (#403B),A
+CALL @#1C6B
+RET
+CP #03              @#1DBC
+JR Z,@#1DC9
+LD B,A
+CALL @#1CC0
+RET NZ
+CALL @#1DD1
+RET
+LD A,#C0            @#1DC9
+CALL @#1C6B
+JP @#1D70
+LD HL,#401F         @#1DD1
+JR @#1DD9
+LD HL,#400F         @#1DD6
+LD DE,#0008         @#1DD9
+ADD HL,DE           @#1DDC
+DJNZ @#1DDC
+LD B,#08
+LD A,(HL)           @#1DE1
+CALL @#1C6F
+INC HL
+DJNZ @#1DE1
+LD A,(#403B)
+INC A
+LD (#403B),A
+RET
+LD A,(#403B)        @#1DF0
+AND A
+JR NZ,@#1E08
+CALL @#1CC0
+LD (#4039),A
+RET NZ
+LD A,#C0
+CALL @#1C6B
+LD A,#01
+LD (#403B),A
+RET
+CP #05              @#1E08
+JR NC,@#1E27
+LD HL,#4013
+LD DE,#0004
+LD B,A
+ADD HL,DE           @#1E13
+DJNZ @#1E13
+LD B,#04
+CALL @#1CA7         @#1E18
+LD (HL),A
+INC HL
+DJNZ @#1E18
+LD A,(#403B)        @#1E1F
+INC A
+LD (#403B),A
+RET
+CP #06              @#1E27
+JR NC,@#1E57
+LD A,#C0
+CALL @#1C6B
+LD BC,#000F
+LD A,(#403A)
+CP #05
+LD A,(#4038)
+JR Z,@#1E4A
+LD HL,#4026
+LD D,H
+LD E,L
+DEC HL
+LDDR
+LD (#4017),A
+JR @#1E1F
+LD HL,#4017         @#1E4A
+LD D,H
+LD E,L
+INC HL
+LDIR
+LD (#4026),A
+JR @#1E1F
+CP #08              @#1E57
+JR NC,@#1E62
+SUB #05
+LD B,A
+CALL @#1DD6
+RET
+LD A,(#4039)        @#1E62
+OR #80
+CALL @#1C6B
+JP @#1D70
+`
+`koniec
+`
